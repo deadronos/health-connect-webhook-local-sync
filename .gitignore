@@ -6,6 +6,11 @@
 !.env.example
 
 node_modules
+.venv/
+__pycache__/
+*.py[cod]
+*.pyc
+
 dist
 build
 coverage
