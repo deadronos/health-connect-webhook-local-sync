@@ -1,17 +1,17 @@
-import { defineSchema } from "convex/schema";
-import { authTables } from "convex/server";
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
 
 export default defineSchema({
   rawDeliveries: defineTable({
-    receivedAt: v.number(),           // Unix timestamp ms
+    receivedAt: v.number(),
     sourceIp: v.string(),
     userAgent: v.optional(v.string()),
-    payloadJson: v.string(),          // Raw JSON text
-    payloadHash: v.string(),          // SHA-256
+    payloadJson: v.string(),
+    payloadHash: v.string(),
     status: v.union(v.literal("stored"), v.literal("error")),
     errorMessage: v.optional(v.string()),
     recordCount: v.number(),
-  }).setIndex("by_payload_hash", ["payloadHash"]),
+  }).index("by_payload_hash", ["payloadHash"]),
 
   healthEvents: defineTable({
     rawDeliveryId: v.string(),
@@ -23,16 +23,16 @@ export default defineSchema({
     ),
     valueNumeric: v.number(),
     unit: v.string(),
-    startTime: v.number(),            // Unix timestamp ms
+    startTime: v.number(),
     endTime: v.number(),
     capturedAt: v.number(),
     externalId: v.optional(v.string()),
     payloadHash: v.string(),
     createdAt: v.number(),
   })
-    .setIndex("by_delivery", ["rawDeliveryId"])
-    .setIndex("by_payload_hash", ["payloadHash"])
-    .setIndex("by_fingerprint", ["recordType", "startTime", "valueNumeric", "unit"]),
+    .index("by_delivery", ["rawDeliveryId"])
+    .index("by_payload_hash", ["payloadHash"])
+    .index("by_fingerprint", ["recordType", "startTime", "valueNumeric", "unit"]),
 
   forwardAttempts: defineTable({
     rawDeliveryId: v.string(),
@@ -41,5 +41,5 @@ export default defineSchema({
     statusCode: v.optional(v.number()),
     success: v.boolean(),
     errorMessage: v.optional(v.string()),
-  }).setIndex("by_delivery", ["rawDeliveryId"]),
+  }).index("by_delivery", ["rawDeliveryId"]),
 });

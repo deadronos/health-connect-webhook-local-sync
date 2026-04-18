@@ -1,43 +1,25 @@
 import hashlib
-import json
 from datetime import datetime, UTC
 from typing import Optional
 
-import httpx
+from convex import ConvexError
+from convex.http_client import ConvexHttpClient
+
+from app.config import Settings
 
 
 class ConvexClient:
+    """HTTP client for Convex self-hosted, wrapping ConvexHttpClient."""
+
     def __init__(self, convex_url: str, admin_key: str):
-        self.site_url = f"{convex_url}/api/site"
-        self.admin_key = admin_key
+        # ConvexHttpClient connects to the Convex backend at :3210
+        self._client = ConvexHttpClient(convex_url)
+        self._client.set_admin_auth(admin_key)
+        self._convex_url = convex_url
 
-    def _headers(self) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self.admin_key}",
-            "Content-Type": "application/json",
-        }
-
-    def _post(self, path: str, args: dict) -> dict:
-        payload = {"path": path, "args": args}
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(
-                self.site_url,
-                json=payload,
-                headers=self._headers(),
-            )
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("error"):
-            raise Exception(f"Convex error: {data['error']}")
-        return data
-
-    def mutation(self, mutation_name: str, args: dict) -> dict:
-        result = self._post(f"healthIngester/mutations/{mutation_name}", args)
-        return result
-
-    def query(self, query_name: str, args: dict) -> dict:
-        result = self._post(f"healthIngester/queries/{query_name}", args)
-        return result
+    def _conv_to_json(self, args: dict) -> dict:
+        """Convert Python args to Convex-compatible format - remove None values."""
+        return {k: v for k, v in args.items() if v is not None}
 
     def store_raw_delivery(
         self,
@@ -50,32 +32,53 @@ class ConvexClient:
     ) -> str:
         payload_hash = hashlib.sha256(payload_json.encode()).hexdigest()
         received_at = int(datetime.now(UTC).timestamp() * 1000)
-        result = self.mutation("storeRawDelivery", {
-            "receivedAt": received_at,
-            "sourceIp": source_ip,
-            "userAgent": user_agent,
-            "payloadJson": payload_json,
-            "payloadHash": payload_hash,
-            "status": status,
-            "errorMessage": error_message,
-            "recordCount": record_count,
-        })
-        return result.get("value", "")
+        try:
+            result = self._client.mutation("mutations.js:storeRawDelivery", self._conv_to_json({
+                "receivedAt": received_at,
+                "sourceIp": source_ip,
+                "userAgent": user_agent,
+                "payloadJson": payload_json,
+                "payloadHash": payload_hash,
+                "status": status,
+                "errorMessage": error_message,
+                "recordCount": record_count,
+            }))
+            return str(result) if result else ""
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
 
     def store_health_events(self, events: list[dict]) -> list[str]:
         if not events:
             return []
-        result = self.mutation("storeHealthEvents", {"events": events})
-        return result.get("value", [])
+        try:
+            result = self._client.mutation("mutations.js:storeHealthEvents", {
+                "events": events,
+            })
+            return [str(r) for r in (result or [])]
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
 
     def check_duplicate(self, payload_hash: str) -> bool:
-        result = self.mutation("checkDuplicateDelivery", {"payloadHash": payload_hash})
-        return result.get("value", False)
+        try:
+            result = self._client.mutation("mutations.js:checkDuplicateDelivery", {
+                "payloadHash": payload_hash,
+            })
+            return bool(result)
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
 
     def list_recent_deliveries(self, limit: int = 10) -> list[dict]:
-        result = self.query("listRecentDeliveries", {"limit": limit})
-        return result.get("value", [])
+        try:
+            result = self._client.query("queries.js:listRecentDeliveries", {
+                "limit": limit,
+            })
+            return result if isinstance(result, list) else []
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
 
     def check_db_health(self) -> dict:
-        result = self.query("checkDbHealth", {})
-        return result.get("value", {})
+        try:
+            result = self._client.query("queries.js:checkDbHealth", {})
+            return result if isinstance(result, dict) else {}
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e

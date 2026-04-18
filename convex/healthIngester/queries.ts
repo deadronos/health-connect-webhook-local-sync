@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-import { query } from "./_generatedServer";
+import { queryGeneric } from "convex/server";
 
-export const listRecentDeliveries = query({
+export const listRecentDeliveries = queryGeneric({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const limit = args.limit ?? 10;
@@ -18,7 +18,7 @@ export const listRecentDeliveries = query({
   },
 });
 
-export const getDeliveryById = query({
+export const getDeliveryById = queryGeneric({
   args: { deliveryId: v.string() },
   handler: async (ctx, args) => {
     const delivery = await ctx.db.get(args.deliveryId as any);
@@ -26,7 +26,7 @@ export const getDeliveryById = query({
   },
 });
 
-export const getHealthEventsByDelivery = query({
+export const getHealthEventsByDelivery = queryGeneric({
   args: { rawDeliveryId: v.string() },
   handler: async (ctx, args) => {
     const events = await ctx.db
@@ -37,7 +37,7 @@ export const getHealthEventsByDelivery = query({
   },
 });
 
-export const checkDbHealth = query({
+export const checkDbHealth = queryGeneric({
   args: {},
   handler: async (ctx) => {
     try {
