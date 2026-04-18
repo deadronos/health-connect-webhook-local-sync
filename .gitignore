@@ -1,0 +1,27 @@
+
+
+.env.*
+.env
+!.env.example
+
+node_modules
+dist
+build
+coverage
+logs
+*.log
+
+# Optional: Ignore IDE/editor specific files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Optional: Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+

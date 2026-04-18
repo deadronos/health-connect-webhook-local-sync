@@ -38,7 +38,7 @@ Start with:
 
 - Python
 - FastAPI
-- SQLite
+- Local selfhosted Convex
 - a single-process local server
 - bearer-token auth
 - JSON payload logging
@@ -50,7 +50,7 @@ Reason:
 - one primary data producer
 - low request volume
 - local development first
-- SQLite is more than enough at this stage
+- Local selfhosted Convex(SQLite backed) is more than enough at this stage
 
 ### When Postgres becomes worth it later
 
@@ -62,7 +62,7 @@ Only switch to Postgres if one or more of these becomes true:
 - external analytics tooling
 - hosted deployment beyond a single-machine setup
 
-Until then, SQLite is the better tool.
+Until then, Local selfhosted Convex(SQLite backed) is the better tool.
 
 ---
 
@@ -83,7 +83,7 @@ The server must:
 
 ### Storage
 
-Use SQLite as the default database.
+Use Local selfhosted Convex(SQLite backed) as the default database.
 
 Store:
 
