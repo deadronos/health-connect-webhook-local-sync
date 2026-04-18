@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from app.models import RecordType
 
@@ -54,3 +54,215 @@ class Normalizer:
             }
             events.append(event)
         return events
+
+
+class AndroidPayloadNormalizer:
+    """Normalizer for Android Health Connect webhook payloads.
+
+    Transforms the Android app's nested JSON format into internal health events.
+    Each array field (steps, heart_rate, etc.) is expanded into individual events.
+    """
+
+    TYPE_KEYS = {
+        "steps": "steps",
+        "sleep": "sleep",
+        "heart_rate": "heart_rate",
+        "heart_rate_variability": "heart_rate_variability",
+        "distance": "distance",
+        "active_calories": "active_calories",
+        "total_calories": "total_calories",
+        "weight": "weight",
+        "height": "height",
+        "oxygen_saturation": "oxygen_saturation",
+        "resting_heart_rate": "resting_heart_rate",
+        "exercise": "exercise",
+        "nutrition": "nutrition",
+        "basal_metabolic_rate": "basal_metabolic_rate",
+        "body_fat": "body_fat",
+        "lean_body_mass": "lean_body_mass",
+        "vo2_max": "vo2_max",
+    }
+
+    def __init__(self, payload: dict[str, Any], payload_hash: str, delivery_id: str):
+        self.payload = payload
+        self.payload_hash = payload_hash
+        self.delivery_id = delivery_id
+
+    def normalize(self) -> list[dict]:
+        events = []
+        created_at = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+        for key, record_type in self.TYPE_KEYS.items():
+            records = self.payload.get(key, [])
+            for record in records:
+                event = self._normalize_record(record, key, record_type, created_at)
+                if event:
+                    events.append(event)
+
+        return events
+
+    def _normalize_record(self, record: dict, key: str, record_type: str, created_at: int) -> Optional[dict]:
+        base = {
+            "rawDeliveryId": self.delivery_id,
+            "recordType": record_type,
+            "payloadHash": self.payload_hash,
+            "createdAt": created_at,
+        }
+        match key:
+            case "steps":
+                return {
+                    **base,
+                    "valueNumeric": float(record["count"]),
+                    "unit": "count",
+                    "startTime": self._parse_instant(record["start_time"]),
+                    "endTime": self._parse_instant(record["end_time"]),
+                    "capturedAt": self._parse_instant(record["end_time"]),
+                }
+            case "sleep":
+                return {
+                    **base,
+                    "valueNumeric": float(record["duration_seconds"]),
+                    "unit": "seconds",
+                    "startTime": self._parse_instant(record["stages"][0]["start_time"]) if record.get("stages") else 0,
+                    "endTime": self._parse_instant(record["session_end_time"]),
+                    "capturedAt": self._parse_instant(record["session_end_time"]),
+                }
+            case "heart_rate":
+                return {
+                    **base,
+                    "valueNumeric": float(record["bpm"]),
+                    "unit": "bpm",
+                    "startTime": self._parse_instant(record["time"]),
+                    "endTime": self._parse_instant(record["time"]),
+                    "capturedAt": self._parse_instant(record["time"]),
+                }
+            case "heart_rate_variability":
+                return {
+                    **base,
+                    "valueNumeric": float(record["rmssd_millis"]),
+                    "unit": "ms",
+                    "startTime": self._parse_instant(record["time"]),
+                    "endTime": self._parse_instant(record["time"]),
+                    "capturedAt": self._parse_instant(record["time"]),
+                }
+            case "distance":
+                return {
+                    **base,
+                    "valueNumeric": float(record["meters"]),
+                    "unit": "m",
+                    "startTime": self._parse_instant(record["start_time"]),
+                    "endTime": self._parse_instant(record["end_time"]),
+                    "capturedAt": self._parse_instant(record["end_time"]),
+                }
+            case "active_calories" | "total_calories":
+                return {
+                    **base,
+                    "valueNumeric": float(record["calories"]),
+                    "unit": "kcal",
+                    "startTime": self._parse_instant(record["start_time"]),
+                    "endTime": self._parse_instant(record["end_time"]),
+                    "capturedAt": self._parse_instant(record["end_time"]),
+                }
+            case "weight":
+                return {
+                    **base,
+                    "valueNumeric": float(record["kilograms"]),
+                    "unit": "kg",
+                    "startTime": self._parse_instant(record["time"]),
+                    "endTime": self._parse_instant(record["time"]),
+                    "capturedAt": self._parse_instant(record["time"]),
+                }
+            case "height":
+                return {
+                    **base,
+                    "valueNumeric": float(record["meters"]),
+                    "unit": "m",
+                    "startTime": self._parse_instant(record["time"]),
+                    "endTime": self._parse_instant(record["time"]),
+                    "capturedAt": self._parse_instant(record["time"]),
+                }
+            case "oxygen_saturation":
+                return {
+                    **base,
+                    "valueNumeric": float(record["percentage"]),
+                    "unit": "%",
+                    "startTime": self._parse_instant(record["time"]),
+                    "endTime": self._parse_instant(record["time"]),
+                    "capturedAt": self._parse_instant(record["time"]),
+                }
+            case "resting_heart_rate":
+                return {
+                    **base,
+                    "valueNumeric": float(record["bpm"]),
+                    "unit": "bpm",
+                    "startTime": self._parse_instant(record["time"]),
+                    "endTime": self._parse_instant(record["time"]),
+                    "capturedAt": self._parse_instant(record["time"]),
+                }
+            case "exercise":
+                return {
+                    **base,
+                    "valueNumeric": float(record["duration_seconds"]),
+                    "unit": "s",
+                    "startTime": self._parse_instant(record["start_time"]),
+                    "endTime": self._parse_instant(record["end_time"]),
+                    "capturedAt": self._parse_instant(record["end_time"]),
+                }
+            case "nutrition":
+                nutrition = record
+                total_cal = nutrition.get("calories")
+                return {
+                    **base,
+                    "valueNumeric": float(total_cal) if total_cal else 0.0,
+                    "unit": "kcal",
+                    "startTime": self._parse_instant(nutrition["start_time"]),
+                    "endTime": self._parse_instant(nutrition["end_time"]),
+                    "capturedAt": self._parse_instant(nutrition["end_time"]),
+                }
+            case "basal_metabolic_rate":
+                return {
+                    **base,
+                    "valueNumeric": float(record["watts"]),
+                    "unit": "W",
+                    "startTime": self._parse_instant(record["time"]),
+                    "endTime": self._parse_instant(record["time"]),
+                    "capturedAt": self._parse_instant(record["time"]),
+                }
+            case "body_fat":
+                return {
+                    **base,
+                    "valueNumeric": float(record["percentage"]),
+                    "unit": "%",
+                    "startTime": self._parse_instant(record["time"]),
+                    "endTime": self._parse_instant(record["time"]),
+                    "capturedAt": self._parse_instant(record["time"]),
+                }
+            case "lean_body_mass":
+                return {
+                    **base,
+                    "valueNumeric": float(record["kilograms"]),
+                    "unit": "kg",
+                    "startTime": self._parse_instant(record["time"]),
+                    "endTime": self._parse_instant(record["time"]),
+                    "capturedAt": self._parse_instant(record["time"]),
+                }
+            case "vo2_max":
+                return {
+                    **base,
+                    "valueNumeric": float(record["ml_per_kg_per_min"]),
+                    "unit": "ml/kg/min",
+                    "startTime": self._parse_instant(record["time"]),
+                    "endTime": self._parse_instant(record["time"]),
+                    "capturedAt": self._parse_instant(record["time"]),
+                }
+            case _:
+                return None
+
+    def _parse_instant(self, ts: str) -> int:
+        if not ts:
+            return 0
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            return int(dt.timestamp() * 1000)
+        except ValueError:
+            return 0
