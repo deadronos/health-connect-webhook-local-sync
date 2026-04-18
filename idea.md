@@ -427,8 +427,8 @@ Later, optionally add:
 
 ```env
 APP_ENV=development
-HOST=127.0.0.1
-PORT=8787
+APP_HOST=127.0.0.1
+APP_PORT=8787
 INGEST_TOKEN=replace_me
 DB_PATH=./data/health.db
 ENABLE_DEBUG_ROUTES=true

@@ -379,8 +379,8 @@ Run: `python3 -m venv .venv && source .venv/bin/activate && pip install -e .`
 
 ```env
 APP_ENV=development
-HOST=127.0.0.1
-PORT=8787
+APP_HOST=127.0.0.1
+APP_PORT=8787
 INGEST_TOKEN=replace_me
 CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210
 CONVEX_SELF_HOSTED_ADMIN_KEY=convex-self-hosted|REPLACE_ME

@@ -219,8 +219,8 @@ Auth required.
 
 ```env
 APP_ENV=development
-HOST=127.0.0.1
-PORT=8787
+APP_HOST=127.0.0.1
+APP_PORT=8787
 INGEST_TOKEN=replace_me
 CONVEX_DEPLOYMENT_URL=https://your-project.convex.cloud
 CONVEX_ADMIN_KEY=replace_me

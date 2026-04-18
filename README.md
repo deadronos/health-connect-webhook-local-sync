@@ -202,8 +202,8 @@ Other types (e.g., `blood_oxygen`, `sleep`, `distance`) are not supported and wi
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `APP_ENV` | `development` | Runtime environment |
-| `HOST` | `127.0.0.1` | Listen address |
-| `PORT` | `8787` | Listen port |
+| `APP_HOST` | `127.0.0.1` | Listen address |
+| `APP_PORT` | `8787` | Listen port |
 | `INGEST_TOKEN` | `replace_me` | Bearer token for auth |
 | `CONVEX_SELF_HOSTED_URL` | `http://127.0.0.1:3210` | Convex backend URL |
 | `CONVEX_SELF_HOSTED_ADMIN_KEY` | — | Convex admin key |
