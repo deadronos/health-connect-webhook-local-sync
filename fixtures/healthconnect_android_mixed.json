@@ -1,0 +1,9 @@
+{
+  "timestamp": "2024-01-01T12:00:00Z",
+  "app_version": "1.0",
+  "steps": [{"count": 8421, "start_time": "2024-01-01T00:00:00Z", "end_time": "2024-01-01T01:00:00Z"}],
+  "heart_rate": [{"bpm": 72, "time": "2024-01-01T00:30:00Z"}],
+  "weight": [{"kilograms": 72.5, "time": "2024-01-01T08:00:00Z"}],
+  "distance": [{"meters": 1500.0, "start_time": "2024-01-01T07:00:00Z", "end_time": "2024-01-01T07:15:00Z"}],
+  "active_calories": [{"calories": 250.5, "start_time": "2024-01-01T07:00:00Z", "end_time": "2024-01-01T07:15:00Z"}]
+}

@@ -1,0 +1,90 @@
+import pytest
+from app.normalizer import Normalizer, NormalizationError
+
+def test_normalize_steps():
+    payload = {
+        "records": [
+            {
+                "record_type": "steps",
+                "value": 8421,
+                "unit": "count",
+                "start_time_ms": 1713446400000,
+                "end_time_ms": 1713489296000,
+                "captured_at_ms": 1713489302000,
+            }
+        ]
+    }
+    normalizer = Normalizer(payload=payload, payload_hash="abc123", delivery_id="del-1")
+    events = normalizer.normalize()
+    assert len(events) == 1
+    assert events[0]["recordType"] == "steps"
+    assert events[0]["valueNumeric"] == 8421.0
+    assert events[0]["unit"] == "count"
+
+def test_normalize_heart_rate():
+    payload = {
+        "records": [
+            {
+                "record_type": "heart_rate",
+                "value": 72,
+                "unit": "bpm",
+                "start_time_ms": 1713446400000,
+                "end_time_ms": 1713489296000,
+                "captured_at_ms": 1713489302000,
+            }
+        ]
+    }
+    normalizer = Normalizer(payload=payload, payload_hash="abc123", delivery_id="del-1")
+    events = normalizer.normalize()
+    assert len(events) == 1
+    assert events[0]["recordType"] == "heart_rate"
+    assert events[0]["valueNumeric"] == 72.0
+    assert events[0]["unit"] == "bpm"
+
+def test_normalize_weight():
+    payload = {
+        "records": [
+            {
+                "record_type": "weight",
+                "value": 72.5,
+                "unit": "kg",
+                "start_time_ms": 1713446400000,
+                "end_time_ms": 1713489296000,
+                "captured_at_ms": 1713489302000,
+            }
+        ]
+    }
+    normalizer = Normalizer(payload=payload, payload_hash="abc123", delivery_id="del-1")
+    events = normalizer.normalize()
+    assert len(events) == 1
+    assert events[0]["recordType"] == "weight"
+    assert events[0]["valueNumeric"] == 72.5
+
+def test_normalize_unsupported_type_raises():
+    payload = {
+        "records": [
+            {
+                "record_type": "blood_oxygen",
+                "value": 98,
+                "unit": "%",
+                "start_time_ms": 1713446400000,
+                "end_time_ms": 1713489296000,
+            }
+        ]
+    }
+    normalizer = Normalizer(payload=payload, payload_hash="abc123", delivery_id="del-1")
+    with pytest.raises(NormalizationError, match="unsupported record type"):
+        normalizer.normalize()
+
+def test_normalize_mixed():
+    payload = {
+        "records": [
+            {"record_type": "steps", "value": 8421, "unit": "count",
+             "start_time_ms": 1713446400000, "end_time_ms": 1713489296000},
+            {"record_type": "heart_rate", "value": 72, "unit": "bpm",
+             "start_time_ms": 1713446400000, "end_time_ms": 1713489296000},
+        ]
+    }
+    normalizer = Normalizer(payload=payload, payload_hash="abc123", delivery_id="del-1")
+    events = normalizer.normalize()
+    assert len(events) == 2
