@@ -1,1 +1,3 @@
-follow @AGENTS.md
+# AGENTS.md prioritization
+
+follow instructions in 'AGENTS.md'
