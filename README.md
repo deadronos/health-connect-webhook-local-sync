@@ -6,47 +6,37 @@ A local Python server that receives webhook payloads from an Android Health Conn
 
 ## Architecture
 
-```
-┌──────────────────┐     POST /ingest/health/v1      ┌────────────────────────────┐
-│  Android sender  │ ─────────────────────────────────▶  FastAPI (health-ingest)  │
-│  or mock_sender  │     Bearer auth required             │  127.0.0.1:8787          │
-└──────────────────┘                                      │                            │
-                                                            │  ┌──────────────────────┐│
-                                                            │  │ auth.py              ││
-                                                            │  │ BearerAuth middleware││
-                                                            │  └──────────┬───────────┘│
-                                                            │             │             │
-                                                            │  ┌──────────▼───────────┐│
-                                                            │  │ normalizer.py        ││
-                                                            │  │ steps / heart_rate / ││
-                                                            │  │ resting_hr / weight  ││
-                                                            │  └──────────┬───────────┘│
-                                                            │             │             │
-                                                            │  ┌──────────▼───────────┐│
-                                                            │  │ convex_client.py     ││
-                                                            │  │ HTTP → Convex API    ││
-                                                            │  └──────────┬───────────┘│
-                                                            └────────────┼────────────┘
-                                                                         │
-                                                            ┌────────────▼────────────┐
-                                                            │  Convex self-hosted     │
-                                                            │  (SQLite-backed)         │
-                                                            │  127.0.0.1:3211/api     │
-                                                            │                         │
-                                                            │  raw_deliveries table   │
-                                                            │  health_events table    │
-                                                            │  forward_attempts table │
-                                                            └─────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph External
+        sender["Android sender\nor mock_sender"]
+        developer["Developer\nBrowser"]
+        lb["Load balancer\nor cron"]
+    end
 
-┌──────────────────┐                                       ┌────────────────────────────┐
-│   Developer      │  GET /debug/recent (auth required)     │  FastAPI (health-ingest)  │
-│   Browser       │ ◀─────────────────────────────────────── │                            │
-└──────────────────┘     JSON delivery list                  └────────────────────────────┘
+    subgraph FastAPI["FastAPI (health-ingest)\n127.0.0.1:8787"]
+        auth["auth.py\nBearerAuth"]
+        normalizer["normalizer.py\nsteps / heart_rate / resting_hr / weight"]
+        client["convex_client.py\nHTTP → Convex API"]
+    end
 
-┌──────────────────┐                                       ┌────────────────────────────┐
-│   Load balancer  │  GET /healthz (no auth)                 │  FastAPI (health-ingest)  │
-│   or cron        │ ◀─────────────────────────────────────── │                            │
-└──────────────────┘     {"ok": true, "db": "ok"}            └────────────────────────────┘
+    subgraph Convex["Convex self-hosted\n127.0.0.1:3211/api site"]
+        raw["raw_deliveries"]
+        events["health_events"]
+        fwd["forward_attempts"]
+    end
+
+    sender -->|"POST /ingest/health/v1\nBearer auth"| auth
+    auth --> normalizer
+    normalizer --> client
+    client -->|"storeRawDelivery"| raw
+    client -->|"storeHealthEvents"| events
+    developer -->|"GET /debug/recent\nBearer auth"| auth
+    lb -->|"GET /healthz\n(no auth)"| auth
+
+    raw --- Convex
+    events --- Convex
+    fwd --- Convex
 ```
 
 **Data flow for a typical ingest:**
