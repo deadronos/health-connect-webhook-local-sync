@@ -1,0 +1,14 @@
+{
+  "name": "health-ingest-convex",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "convex dev"
+  },
+  "dependencies": {
+    "convex": "^1.17.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
