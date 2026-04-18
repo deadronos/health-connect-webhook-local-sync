@@ -1,0 +1,12 @@
+{
+  "records": [
+    {
+      "record_type": "steps",
+      "value": 8421,
+      "unit": "count",
+      "start_time_ms": 1713446400000,
+      "end_time_ms": 1713489296000,
+      "captured_at_ms": 1713489302000
+    }
+  ]
+}
