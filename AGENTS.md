@@ -18,12 +18,16 @@ The `docs/superpowers/` directory contains planning and skill artifacts (specs, 
 
 **Docs and code must never diverge.** If you implement something that contradicts an ADR, you must update the ADR first. If you discover the docs are wrong, update them before or alongside the code change.
 
+**This is a hard requirement — not optional.** A PR cannot be merged and code cannot be pushed to a protected branch if docs and code are out of sync. If you implement a feature, fix a bug, or change behavior, you MUST verify docs are accurate before the PR is ready to merge. If you're unsure whether a doc change is needed, lean toward updating it.
+
 Specifically:
 - If you add a new record type to the normalizer, update `002-strict-normalizer.md` if it changes the architectural stance
 - If you change auth, update `003-bearer-token-auth.md`
 - If you change the database layer, update `001-convex-as-database.md`
 - If you add a new API endpoint, add or update an ADR
 - If you remove or refactor a feature, update or deprecate the relevant ADR
+- If you add new data types, update README features list
+- If you change the architecture or data flow, update README architecture diagram
 
 ADRs should be kept accurate but _not_ cluttered with implementation details. They document decisions, not code.
 
@@ -61,6 +65,17 @@ You do not need an ADR for:
 - Bug fixes that don't change intended behavior
 - Refactoring that preserves the same external API and data model
 - Test additions without behavior change
+
+## Pre-Merge Checklist
+
+**Before any PR is ready to merge, verify ALL of the following:**
+
+1. **Docs in sync** — `README.md`, `CHANGELOG.md`, and relevant ADRs are updated to reflect the change
+2. **CHANGELOG updated** — One-line entry in `CHANGELOG.md` with `YYYY-MM-DD` prefix, sanitized (no tokens/secrets)
+3. **Code matches docs** — If the change contradicts a doc, either fix the code or update the doc
+4. **Tests pass** — Run `pytest tests/` and confirm no new failures
+
+**If any item fails, the PR is not ready to merge. Fix first, then merge.**
 
 ## Project Structure Overview
 
