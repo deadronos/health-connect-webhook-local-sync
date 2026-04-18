@@ -25,9 +25,22 @@ export const storeHealthEvents = mutationGeneric({
         rawDeliveryId: v.string(),
         recordType: v.union(
           v.literal("steps"),
+          v.literal("sleep"),
           v.literal("heart_rate"),
+          v.literal("heart_rate_variability"),
+          v.literal("distance"),
+          v.literal("active_calories"),
+          v.literal("total_calories"),
+          v.literal("weight"),
+          v.literal("height"),
+          v.literal("oxygen_saturation"),
           v.literal("resting_heart_rate"),
-          v.literal("weight")
+          v.literal("exercise"),
+          v.literal("nutrition"),
+          v.literal("basal_metabolic_rate"),
+          v.literal("body_fat"),
+          v.literal("lean_body_mass"),
+          v.literal("vo2_max")
         ),
         valueNumeric: v.number(),
         unit: v.string(),
