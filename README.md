@@ -53,10 +53,11 @@ flowchart LR
 
 ## Features
 
-- **Ingest endpoint** (`POST /ingest/health/v1`) — accepts Health Connect webhook payloads, validates bearer auth, stores raw + normalized data
+- **Ingest endpoint** (`POST /ingest/health/v1`) — accepts Health Connect webhook payloads in flat or Android nested format, validates bearer auth, stores raw + normalized data
 - **Health check** (`GET /healthz`) — unauthenticated probe for load balancers and health checks
 - **Debug endpoint** (`GET /debug/recent`) — inspect recent deliveries (auth required, gated by `ENABLE_DEBUG_ROUTES`)
-- **Strict normalizer** — handles steps, heart_rate, resting_heart_rate, weight; raises on unknown types
+- **Strict normalizer** — handles all 17 Android data types: steps, sleep, heart_rate, heart_rate_variability, distance, active_calories, total_calories, weight, height, oxygen_saturation, resting_heart_rate, exercise, nutrition, basal_metabolic_rate, body_fat, lean_body_mass, vo2_max; raises on unknown types
+- **Dual format support** — accepts both flat `records` format and Android nested format (auto-detected by payload structure)
 - **Dedupe at event level** — raw deliveries are all kept; normalized events are fingerprinted to prevent duplicates
 - **Mock sender** — CLI tool to send fixture payloads locally without a real phone/watch
 - **Convex self-hosted** — SQLite-backed, zero ops overhead for local development
