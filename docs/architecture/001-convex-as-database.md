@@ -70,6 +70,8 @@ Use **Convex self-hosted with SQLite backing** as the default database.
 
 ## Notes
 
-The Convex backend must be reachable at `CONVEX_SELF_HOSTED_URL` for the Python app to function. The `convex/` directory is a sibling to `app/` and communicates via the site proxy at `http://127.0.0.1:3211/api/site`.
+The Convex backend must be reachable at `CONVEX_SELF_HOSTED_URL` for the Python app to function. The `convex/` directory is a sibling to `app/` and communicates via the backend at `http://127.0.0.1:3210/api` (not the site proxy at 3211).
 
-If the Convex backend is unavailable, the ingest endpoint returns 500 — raw delivery persistence and OpenClaw forwarding are both blocked. This is a known limitation for MVP; future iterations may add local buffering.
+Python client uses the official `ConvexHttpClient` from the `convex` Python package and calls functions using `module.js:functionName` paths (e.g., `mutations.js:storeRawDelivery`).
+
+Convex function names are relative to the `convex.json` functions directory, not the full module path.
