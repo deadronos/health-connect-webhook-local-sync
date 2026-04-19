@@ -14,7 +14,7 @@ flowchart LR
         probe["Load balancer\nor uptime probe"]
     end
 
-    subgraph FastAPI["FastAPI (health-ingest)\n127.0.0.1:8787"]
+    subgraph FastAPI["FastAPI (health-ingest)\n0.0.0.0:8787 bind"]
         auth["Bearer auth"]
         normalizers["Strict flat + Android\nnormalizers"]
         analytics_api["/analytics/**"]
@@ -106,7 +106,7 @@ Create a local `.env` file in the repo root:
 
 ```dotenv
 APP_ENV=development
-APP_HOST=127.0.0.1
+APP_HOST=0.0.0.0
 APP_PORT=8787
 INGEST_TOKEN=replace_me
 CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210
@@ -123,6 +123,8 @@ OPENCLAW_WEBHOOK_TOKEN=
 ```bash
 ./scripts/dev.sh
 ```
+
+By default, the development server binds to `0.0.0.0:8787` so sandboxed agents and other local clients can reach it. On the same machine, you can still use `http://127.0.0.1:8787` or `http://localhost:8787`.
 
 ### Send a fixture payload
 
@@ -266,7 +268,7 @@ The current `exercise` mapping stores `duration_seconds` as the value and preser
 | Variable | Default | Description |
 | -------- | ------- | ----------- |
 | `APP_ENV` | `development` | Runtime environment |
-| `APP_HOST` | `127.0.0.1` | Listen address |
+| `APP_HOST` | `0.0.0.0` | Listen address for the FastAPI dev server; binds all interfaces so sandboxed agents can reach `:8787` |
 | `APP_PORT` | `8787` | Listen port |
 | `INGEST_TOKEN` | `replace_me` | Bearer token for `/ingest/**`, `/debug/**`, `/analytics/**`, and `/dashboard` |
 | `CONVEX_SELF_HOSTED_URL` | `http://127.0.0.1:3210` | Convex backend URL |
