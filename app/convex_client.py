@@ -8,18 +8,76 @@ from convex.http_client import ConvexHttpClient
 from app.config import Settings
 
 
+DEFAULT_INGEST_EVENT_BATCH_SIZE = 1000
+
+
 class ConvexClient:
     """HTTP client for Convex self-hosted, wrapping ConvexHttpClient."""
 
-    def __init__(self, convex_url: str, admin_key: str):
+    def __init__(self, convex_url: str, admin_key: str, ingest_batch_size: int = DEFAULT_INGEST_EVENT_BATCH_SIZE):
         # ConvexHttpClient connects to the Convex backend at :3210
         self._client = ConvexHttpClient(convex_url)
         self._client.set_admin_auth(admin_key)
         self._convex_url = convex_url
+        if ingest_batch_size < 1:
+            raise ValueError("ingest_batch_size must be >= 1")
+        self._ingest_batch_size = ingest_batch_size
 
     def _conv_to_json(self, args: dict) -> dict:
         """Convert Python args to Convex-compatible format - remove None values."""
         return {k: v for k, v in args.items() if v is not None}
+
+    def _iter_event_chunks(self, events: list[dict]):
+        for start in range(0, len(events), self._ingest_batch_size):
+            yield events[start:start + self._ingest_batch_size]
+
+    def _store_raw_delivery_payload(self, raw_delivery: dict) -> str:
+        result = self._client.mutation("mutations.js:storeRawDelivery", self._conv_to_json(raw_delivery))
+        return str(result) if result else ""
+
+    def _update_raw_delivery_status(
+        self,
+        raw_delivery_id: str,
+        status: str,
+        error_message: Optional[str] = None,
+    ) -> None:
+        self._client.mutation("mutations.js:updateRawDeliveryStatus", self._conv_to_json({
+            "rawDeliveryId": raw_delivery_id,
+            "status": status,
+            "errorMessage": error_message,
+        }))
+
+    def _ingest_delivery_chunk(self, raw_delivery_id: str, events: list[dict]) -> dict:
+        result = self._client.mutation("mutations.js:ingestNormalizedEventsChunk", {
+            "rawDeliveryId": raw_delivery_id,
+            "events": events,
+        })
+        return {
+            "received_records": int(result["receivedRecords"]),
+            "stored_records": int(result["storedRecords"]),
+            "duplicate_records": int(result.get("duplicateRecords", 0)),
+        }
+
+    def _with_delivery_status(
+        self,
+        raw_delivery: dict,
+        *,
+        status: str,
+        error_message: Optional[str] = None,
+    ) -> dict:
+        next_raw_delivery = dict(raw_delivery)
+        next_raw_delivery["status"] = status
+        if error_message is not None:
+            next_raw_delivery["errorMessage"] = error_message
+        else:
+            next_raw_delivery.pop("errorMessage", None)
+        return self._conv_to_json(next_raw_delivery)
+
+    def _mark_raw_delivery_error_best_effort(self, raw_delivery_id: str, error_message: str) -> None:
+        try:
+            self._update_raw_delivery_status(raw_delivery_id, "error", error_message)
+        except Exception:
+            pass
 
     def store_raw_delivery(
         self,
@@ -27,7 +85,7 @@ class ConvexClient:
         user_agent: Optional[str],
         payload_json: str,
         record_count: int,
-        status: str = "stored",
+        status: str = "completed",
         error_message: Optional[str] = None,
         data_class: str = "valid",
         data_class_reason: Optional[str] = None,
@@ -64,16 +122,44 @@ class ConvexClient:
 
     def ingest_delivery(self, raw_delivery: dict, events: list[dict]) -> dict:
         try:
-            result = self._client.mutation("mutations.js:ingestNormalizedDelivery", {
-                "rawDelivery": self._conv_to_json(raw_delivery),
-                "events": events,
-            })
+            if len(events) <= self._ingest_batch_size:
+                result = self._client.mutation("mutations.js:ingestNormalizedDelivery", {
+                    "rawDelivery": self._with_delivery_status(raw_delivery, status="completed"),
+                    "events": events,
+                })
+                return {
+                    "delivery_id": str(result["deliveryId"]),
+                    "received_records": int(result["receivedRecords"]),
+                    "stored_records": int(result["storedRecords"]),
+                    "duplicate_records": int(result.get("duplicateRecords", 0)),
+                }
+
+            delivery_id = self._store_raw_delivery_payload(
+                self._with_delivery_status(raw_delivery, status="in_progress")
+            )
+            received_records = 0
+            stored_records = 0
+            duplicate_records = 0
+
+            try:
+                for chunk in self._iter_event_chunks(events):
+                    chunk_result = self._ingest_delivery_chunk(delivery_id, chunk)
+                    received_records += chunk_result["received_records"]
+                    stored_records += chunk_result["stored_records"]
+                    duplicate_records += chunk_result["duplicate_records"]
+
+                self._update_raw_delivery_status(delivery_id, "completed")
+            except Exception as e:
+                self._mark_raw_delivery_error_best_effort(delivery_id, str(e))
+                raise
+
             return {
-                "delivery_id": str(result["deliveryId"]),
-                "received_records": int(result["receivedRecords"]),
-                "stored_records": int(result["storedRecords"]),
-                "duplicate_records": int(result.get("duplicateRecords", 0)),
+                "delivery_id": delivery_id,
+                "received_records": received_records,
+                "stored_records": stored_records,
+                "duplicate_records": duplicate_records,
             }
+
         except ConvexError as e:
             raise Exception(f"Convex error: {e}") from e
 

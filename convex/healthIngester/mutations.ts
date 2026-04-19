@@ -2,6 +2,12 @@ import { mutationGeneric } from "convex/server";
 import { v } from "convex/values";
 
 const dataClassValidator = v.union(v.literal("valid"), v.literal("test"));
+const rawDeliveryStatusValidator = v.union(
+  v.literal("stored"),
+  v.literal("in_progress"),
+  v.literal("completed"),
+  v.literal("error"),
+);
 
 const recordTypeValidator = v.union(
   v.literal("steps"),
@@ -29,7 +35,7 @@ const rawDeliveryValidator = {
   userAgent: v.optional(v.string()),
   payloadJson: v.string(),
   payloadHash: v.string(),
-  status: v.union(v.literal("stored"), v.literal("error")),
+  status: rawDeliveryStatusValidator,
   errorMessage: v.optional(v.string()),
   recordCount: v.number(),
   dataClass: v.optional(dataClassValidator),
@@ -60,7 +66,7 @@ type RawDelivery = {
   userAgent?: string;
   payloadJson: string;
   payloadHash: string;
-  status: "stored" | "error";
+  status: "stored" | "in_progress" | "completed" | "error";
   errorMessage?: string;
   recordCount: number;
   dataClass?: "valid" | "test";
@@ -83,11 +89,62 @@ type HealthEvent = {
   createdAt: number;
 };
 
+type MutationLookupState = {
+  existingEventsByFingerprint?: Map<string, any>;
+  existingBucketsByKey?: Map<string, any>;
+};
+
+type IngestMutationResult = {
+  receivedRecords: number;
+  storedRecords: number;
+  duplicateRecords: number;
+};
+
 const hasMissingIndexError = (error: unknown, indexName: string): boolean => {
   return error instanceof Error && error.message.includes(`Index ${indexName} not found.`);
 };
 
-const findExistingEventByFingerprint = async (ctx: any, fingerprint: string): Promise<any | null> => {
+const getBucketKey = (bucketSize: BucketSize, recordType: string, bucketStart: number): string => {
+  return `${bucketSize}:${recordType}:${bucketStart}`;
+};
+
+const loadEventLookup = async (ctx: any, lookupState?: MutationLookupState): Promise<Map<string, any>> => {
+  if (!lookupState) {
+    const events = await ctx.db.query("healthEvents").collect();
+    return new Map(events.map((event: any) => [event.fingerprint, event]));
+  }
+
+  if (!lookupState.existingEventsByFingerprint) {
+    const events = await ctx.db.query("healthEvents").collect();
+    lookupState.existingEventsByFingerprint = new Map(events.map((event: any) => [event.fingerprint, event]));
+  }
+
+  return lookupState.existingEventsByFingerprint;
+};
+
+const loadBucketLookup = async (ctx: any, lookupState?: MutationLookupState): Promise<Map<string, any>> => {
+  if (!lookupState) {
+    const buckets = await ctx.db.query("healthEventBuckets").collect();
+    return new Map(
+      buckets.map((bucket: any) => [getBucketKey(bucket.bucketSize, bucket.recordType, bucket.bucketStart), bucket]),
+    );
+  }
+
+  if (!lookupState.existingBucketsByKey) {
+    const buckets = await ctx.db.query("healthEventBuckets").collect();
+    lookupState.existingBucketsByKey = new Map(
+      buckets.map((bucket: any) => [getBucketKey(bucket.bucketSize, bucket.recordType, bucket.bucketStart), bucket]),
+    );
+  }
+
+  return lookupState.existingBucketsByKey;
+};
+
+const findExistingEventByFingerprint = async (
+  ctx: any,
+  fingerprint: string,
+  lookupState?: MutationLookupState,
+): Promise<any | null> => {
   try {
     const existing = await ctx.db
       .query("healthEvents")
@@ -99,8 +156,8 @@ const findExistingEventByFingerprint = async (ctx: any, fingerprint: string): Pr
       throw error;
     }
 
-    const events = await ctx.db.query("healthEvents").collect();
-    return events.find((event: any) => event.fingerprint === fingerprint) ?? null;
+    const eventsByFingerprint = await loadEventLookup(ctx, lookupState);
+    return eventsByFingerprint.get(fingerprint) ?? null;
   }
 };
 
@@ -109,6 +166,7 @@ const findExistingBucket = async (
   bucketSize: BucketSize,
   recordType: string,
   bucketStart: number,
+  lookupState?: MutationLookupState,
 ): Promise<any | null> => {
   try {
     const existing = await ctx.db
@@ -123,15 +181,8 @@ const findExistingBucket = async (
       throw error;
     }
 
-    const buckets = await ctx.db.query("healthEventBuckets").collect();
-    return (
-      buckets.find(
-        (bucket: any) =>
-          bucket.bucketSize === bucketSize &&
-          bucket.recordType === recordType &&
-          bucket.bucketStart === bucketStart,
-      ) ?? null
-    );
+    const bucketsByKey = await loadBucketLookup(ctx, lookupState);
+    return bucketsByKey.get(getBucketKey(bucketSize, recordType, bucketStart)) ?? null;
   }
 };
 
@@ -145,23 +196,36 @@ const getBucketStart = (timestamp: number, bucketSize: BucketSize): number => {
   return date.getTime();
 };
 
-const upsertBucket = async (ctx: any, event: HealthEvent, bucketSize: BucketSize): Promise<void> => {
+const upsertBucket = async (
+  ctx: any,
+  event: HealthEvent,
+  bucketSize: BucketSize,
+  lookupState?: MutationLookupState,
+): Promise<void> => {
   const bucketStart = getBucketStart(event.capturedAt, bucketSize);
-  const bucket = await findExistingBucket(ctx, bucketSize, event.recordType, bucketStart);
+  const bucketKey = getBucketKey(bucketSize, event.recordType, bucketStart);
+  const bucket = await findExistingBucket(ctx, bucketSize, event.recordType, bucketStart, lookupState);
   if (bucket) {
     const isLatest = event.capturedAt >= bucket.latestAt;
-    await ctx.db.patch(bucket._id, {
+    const nextBucket = {
       count: bucket.count + 1,
       sum: bucket.sum + event.valueNumeric,
       min: Math.min(bucket.min, event.valueNumeric),
       max: Math.max(bucket.max, event.valueNumeric),
       latestValue: isLatest ? event.valueNumeric : bucket.latestValue,
       latestAt: isLatest ? event.capturedAt : bucket.latestAt,
-    });
+    };
+    await ctx.db.patch(bucket._id, nextBucket);
+    if (lookupState?.existingBucketsByKey) {
+      lookupState.existingBucketsByKey.set(bucketKey, {
+        ...bucket,
+        ...nextBucket,
+      });
+    }
     return;
   }
 
-  await ctx.db.insert("healthEventBuckets", {
+  const nextBucket = {
     bucketSize,
     bucketStart,
     recordType: event.recordType,
@@ -171,7 +235,60 @@ const upsertBucket = async (ctx: any, event: HealthEvent, bucketSize: BucketSize
     max: event.valueNumeric,
     latestValue: event.valueNumeric,
     latestAt: event.capturedAt,
-  });
+  };
+
+  const bucketId = await ctx.db.insert("healthEventBuckets", nextBucket);
+  if (lookupState?.existingBucketsByKey) {
+    lookupState.existingBucketsByKey.set(bucketKey, {
+      _id: bucketId,
+      ...nextBucket,
+    });
+  }
+};
+
+const ingestEventsIntoDelivery = async (
+  ctx: any,
+  rawDeliveryId: string,
+  incomingEvents: HealthEvent[],
+): Promise<IngestMutationResult> => {
+  const seenFingerprints = new Set<string>();
+  const lookupState: MutationLookupState = {};
+  let storedRecords = 0;
+
+  for (const incomingEvent of incomingEvents) {
+    if (seenFingerprints.has(incomingEvent.fingerprint)) {
+      continue;
+    }
+    seenFingerprints.add(incomingEvent.fingerprint);
+
+    const existing = await findExistingEventByFingerprint(ctx, incomingEvent.fingerprint, lookupState);
+
+    if (existing) {
+      continue;
+    }
+
+    const event = {
+      ...incomingEvent,
+      rawDeliveryId,
+    };
+
+    const eventId = await ctx.db.insert("healthEvents", event);
+    if (lookupState.existingEventsByFingerprint) {
+      lookupState.existingEventsByFingerprint.set(event.fingerprint, {
+        _id: eventId,
+        ...event,
+      });
+    }
+    storedRecords += 1;
+    await upsertBucket(ctx, event, "hour", lookupState);
+    await upsertBucket(ctx, event, "day", lookupState);
+  }
+
+  return {
+    receivedRecords: incomingEvents.length,
+    storedRecords,
+    duplicateRecords: incomingEvents.length - storedRecords,
+  };
 };
 
 export const storeRawDelivery = mutationGeneric({
@@ -203,38 +320,37 @@ export const ingestNormalizedDelivery = mutationGeneric({
   },
   handler: async (ctx, args) => {
     const deliveryId = await ctx.db.insert("rawDeliveries", args.rawDelivery as RawDelivery);
-    const seenFingerprints = new Set<string>();
-    let storedRecords = 0;
-
-    for (const incomingEvent of args.events as HealthEvent[]) {
-      if (seenFingerprints.has(incomingEvent.fingerprint)) {
-        continue;
-      }
-      seenFingerprints.add(incomingEvent.fingerprint);
-
-      const existing = await findExistingEventByFingerprint(ctx, incomingEvent.fingerprint);
-
-      if (existing) {
-        continue;
-      }
-
-      const event = {
-        ...incomingEvent,
-        rawDeliveryId: deliveryId,
-      };
-
-      await ctx.db.insert("healthEvents", event);
-      storedRecords += 1;
-      await upsertBucket(ctx, event, "hour");
-      await upsertBucket(ctx, event, "day");
-    }
+    const ingestResult = await ingestEventsIntoDelivery(ctx, deliveryId, args.events as HealthEvent[]);
 
     return {
       deliveryId,
-      receivedRecords: args.events.length,
-      storedRecords,
-      duplicateRecords: args.events.length - storedRecords,
+      ...ingestResult,
     };
+  },
+});
+
+export const ingestNormalizedEventsChunk = mutationGeneric({
+  args: {
+    rawDeliveryId: v.string(),
+    events: v.array(healthEventValidator),
+  },
+  handler: async (ctx, args) => {
+    return ingestEventsIntoDelivery(ctx, args.rawDeliveryId, args.events as HealthEvent[]);
+  },
+});
+
+export const updateRawDeliveryStatus = mutationGeneric({
+  args: {
+    rawDeliveryId: v.string(),
+    status: rawDeliveryStatusValidator,
+    errorMessage: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.rawDeliveryId as any, {
+      status: args.status,
+      ...(args.errorMessage !== undefined ? { errorMessage: args.errorMessage } : {}),
+    });
+    return args.rawDeliveryId;
   },
 });
 

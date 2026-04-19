@@ -8,7 +8,12 @@ export default defineSchema({
     userAgent: v.optional(v.string()),
     payloadJson: v.string(),
     payloadHash: v.string(),
-    status: v.union(v.literal("stored"), v.literal("error")),
+    status: v.union(
+      v.literal("stored"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("error")
+    ),
     errorMessage: v.optional(v.string()),
     recordCount: v.number(),
     dataClass: v.optional(v.union(v.literal("valid"), v.literal("test"))),

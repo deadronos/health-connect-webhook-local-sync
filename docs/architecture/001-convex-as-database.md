@@ -86,6 +86,8 @@ Convex function names are relative to the `convex.json` functions directory, not
 
 Phase 2 adds a `healthEventBuckets` table for `hour` and `day` rollups so the built-in dashboard and `/analytics/**` APIs can stay Convex-first.
 
+Large historical ingests may be buffered into one raw-delivery write plus multiple event-chunk mutations so each Convex function stays under the platform's single-execution read budget while preserving the same external HTTP ingest contract. Buffered deliveries are written as `in_progress` first, then promoted to `completed` or `error` on the same raw-delivery row so partial chunk failures remain visible.
+
 Phase 2.5 also uses Convex cron jobs and internal mutations for scheduled cleanup of explicitly tagged test data while keeping bucket recomputation inside the same database layer.
 
 Revisit Postgres when one or more of these become true:
