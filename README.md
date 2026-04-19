@@ -152,6 +152,8 @@ Authorization: Bearer <INGEST_TOKEN>
 
 ## API overview
 
+For the full current route contract, including auth expectations, query parameters, payload shapes, and response examples, see `docs/architecture/api-route-reference.md`.
+
 ### `POST /ingest/health/v1`
 
 - **Auth:** required
@@ -316,6 +318,7 @@ docs/
     002-strict-normalizer.md
     003-bearer-token-auth.md
     004-analytics-read-model.md
+    api-route-reference.md
 ```
 
 ---
