@@ -1,5 +1,7 @@
 # One Entry per Line
 
+2026-04-19 Make dashboard metric chips, summary cards, and rail controls switch the focused metric and section dynamically
+2026-04-19 Refresh the built-in dashboard with a Figma-inspired dark multi-panel analytics layout
 2026-04-19 Add daily Convex cleanup for explicitly tagged test deliveries and rebuild affected analytics buckets
 2026-04-19 Mark mock sender fixture ingests as test data by default and run official Convex cleanup tests from scripts/test.sh
 2026-04-19 Add /login and signed browser sessions for /dashboard and /analytics/** while keeping ingest and debug routes bearer-only

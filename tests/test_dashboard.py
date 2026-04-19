@@ -31,6 +31,11 @@ async def test_dashboard_returns_html():
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "Health Analytics Dashboard" in response.text
+    assert "Track your daily activity" in response.text
+    assert "Recent events" in response.text
+    assert "dashboard-page" in response.text
+    assert 'data-section-target="feature"' in response.text
+    assert 'id="overview"' in response.text
     assert "hc_test_session=" in response.headers["set-cookie"]
 
 
@@ -51,3 +56,4 @@ async def test_dashboard_accepts_existing_session_cookie():
     assert login_response.status_code == 303
     assert response.status_code == 200
     assert "Health Analytics Dashboard" in response.text
+    assert "Trend spotlight" in response.text
