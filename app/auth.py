@@ -1,6 +1,6 @@
 """Bearer token and session-based authentication for the Health Connect webhook service."""
 
-from secrets import compare_digest
+import hmac
 
 from fastapi import HTTPException, Request
 
@@ -37,9 +37,12 @@ class BearerAuth:
         Raises:
             HTTPException: If the token is missing or does not match.
         """
-        if token is None or token == "":
+        if not token:
             raise HTTPException(status_code=401, detail="Missing token")
-        if not compare_digest(token, self.token):
+
+        # Use constant-time comparison to prevent timing attacks where an attacker
+        # could guess the token byte-by-byte based on how long the comparison takes.
+        if not hmac.compare_digest(token, self.token):
             raise HTTPException(status_code=401, detail="Invalid token")
         return True
 
@@ -133,7 +136,7 @@ class BearerAuth:
         """Check whether the request has an active dashboard session.
 
         Args:
-            request: The incoming FastAPI request with an active session middleware.
+            request: The incoming FastAPI request.
 
         Returns:
             True if the session exists and is marked as authenticated.
