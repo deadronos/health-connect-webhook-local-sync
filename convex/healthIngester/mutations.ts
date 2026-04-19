@@ -77,6 +77,58 @@ type HealthEvent = {
   createdAt: number;
 };
 
+const hasMissingIndexError = (error: unknown, indexName: string): boolean => {
+  return error instanceof Error && error.message.includes(`Index ${indexName} not found.`);
+};
+
+const findExistingEventByFingerprint = async (ctx: any, fingerprint: string): Promise<any | null> => {
+  try {
+    const existing = await ctx.db
+      .query("healthEvents")
+      .withIndex("by_fingerprint", (q: any) => q.eq("fingerprint", fingerprint))
+      .take(1);
+    return existing[0] ?? null;
+  } catch (error) {
+    if (!hasMissingIndexError(error, "healthEvents.by_fingerprint")) {
+      throw error;
+    }
+
+    const events = await ctx.db.query("healthEvents").collect();
+    return events.find((event: any) => event.fingerprint === fingerprint) ?? null;
+  }
+};
+
+const findExistingBucket = async (
+  ctx: any,
+  bucketSize: BucketSize,
+  recordType: string,
+  bucketStart: number,
+): Promise<any | null> => {
+  try {
+    const existing = await ctx.db
+      .query("healthEventBuckets")
+      .withIndex("by_bucket", (q: any) =>
+        q.eq("bucketSize", bucketSize).eq("recordType", recordType).eq("bucketStart", bucketStart)
+      )
+      .take(1);
+    return existing[0] ?? null;
+  } catch (error) {
+    if (!hasMissingIndexError(error, "healthEventBuckets.by_bucket")) {
+      throw error;
+    }
+
+    const buckets = await ctx.db.query("healthEventBuckets").collect();
+    return (
+      buckets.find(
+        (bucket: any) =>
+          bucket.bucketSize === bucketSize &&
+          bucket.recordType === recordType &&
+          bucket.bucketStart === bucketStart,
+      ) ?? null
+    );
+  }
+};
+
 const getBucketStart = (timestamp: number, bucketSize: BucketSize): number => {
   const date = new Date(timestamp);
   if (bucketSize === "hour") {
@@ -89,14 +141,7 @@ const getBucketStart = (timestamp: number, bucketSize: BucketSize): number => {
 
 const upsertBucket = async (ctx: any, event: HealthEvent, bucketSize: BucketSize): Promise<void> => {
   const bucketStart = getBucketStart(event.capturedAt, bucketSize);
-  const existing = await ctx.db
-    .query("healthEventBuckets")
-    .withIndex("by_bucket", (q: any) =>
-      q.eq("bucketSize", bucketSize).eq("recordType", event.recordType).eq("bucketStart", bucketStart)
-    )
-    .take(1);
-
-  const bucket = existing[0];
+  const bucket = await findExistingBucket(ctx, bucketSize, event.recordType, bucketStart);
   if (bucket) {
     const isLatest = event.capturedAt >= bucket.latestAt;
     await ctx.db.patch(bucket._id, {
@@ -161,12 +206,9 @@ export const ingestNormalizedDelivery = mutationGeneric({
       }
       seenFingerprints.add(incomingEvent.fingerprint);
 
-      const existing = await ctx.db
-        .query("healthEvents")
-        .withIndex("by_fingerprint", (q: any) => q.eq("fingerprint", incomingEvent.fingerprint))
-        .take(1);
+      const existing = await findExistingEventByFingerprint(ctx, incomingEvent.fingerprint);
 
-      if (existing.length > 0) {
+      if (existing) {
         continue;
       }
 

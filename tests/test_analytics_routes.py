@@ -99,3 +99,71 @@ async def test_export_csv_returns_attachment():
     assert response.status_code == 200
     assert response.headers["content-disposition"] == "attachment; filename=health-events.csv"
     assert "record_type" in response.text
+
+
+@pytest.mark.asyncio
+async def test_events_legacy_row_without_fingerprint_uses_payload_hash():
+    from httpx import ASGITransport, AsyncClient
+    from app.main import create_app
+
+    app = create_app()
+
+    with patch("app.routes.analytics.client") as mock_client:
+        mock_client.list_analytics_events.return_value = [
+            {
+                "rawDeliveryId": "delivery-legacy",
+                "recordType": "steps",
+                "valueNumeric": 1000.0,
+                "unit": "count",
+                "startTime": 1710800000000,
+                "endTime": 1710803600000,
+                "capturedAt": 1710803600000,
+                "deviceId": None,
+                "externalId": None,
+                "payloadHash": "legacy-hash-123",
+                "metadata": None,
+            }
+        ]
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get(
+                "/analytics/events",
+                headers={"Authorization": "Bearer test-token"},
+            )
+
+    assert response.status_code == 200
+    assert response.json()["events"][0]["fingerprint"] == "legacy-hash-123"
+
+
+@pytest.mark.asyncio
+async def test_export_csv_legacy_row_without_fingerprint_uses_payload_hash():
+    from httpx import ASGITransport, AsyncClient
+    from app.main import create_app
+
+    app = create_app()
+
+    with patch("app.routes.analytics.client") as mock_client:
+        mock_client.list_analytics_events.return_value = [
+            {
+                "rawDeliveryId": "delivery-legacy",
+                "recordType": "steps",
+                "valueNumeric": 1000.0,
+                "unit": "count",
+                "startTime": 1710800000000,
+                "endTime": 1710803600000,
+                "capturedAt": 1710803600000,
+                "deviceId": None,
+                "externalId": None,
+                "payloadHash": "legacy-hash-123",
+                "metadata": None,
+            }
+        ]
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get(
+                "/analytics/export.csv",
+                headers={"Authorization": "Bearer test-token"},
+            )
+
+    assert response.status_code == 200
+    assert "legacy-hash-123" in response.text
