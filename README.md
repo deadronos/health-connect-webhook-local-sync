@@ -86,7 +86,7 @@ flowchart LR
 - **Canonical event contract** — normalized events preserve `deviceId`, `externalId`, `fingerprint`, and optional `metadata`.
 - **Dual payload support** — accepts both legacy flat `records` payloads and nested Android Health Connect payloads.
 - **Analytics JSON APIs** — authenticated `/analytics/overview`, `/analytics/timeseries`, `/analytics/events`, and `/analytics/export.csv` with bearer or dashboard-session auth.
-- **Built-in dashboard** — browser-friendly `/login` flow plus authenticated `/dashboard` page served by FastAPI with Jinja2 templates and vanilla JavaScript.
+- **Built-in dashboard** — browser-friendly `/login` flow plus an authenticated `/dashboard` page with a dark, multi-panel analytics layout inspired by the fitness-dashboard reference design, including clickable metric chips/cards and section navigation, still served by FastAPI with Jinja2 templates and vanilla JavaScript.
 - **Scheduled test-data cleanup** — Convex classifies mock/explicitly tagged fixture ingests as `test`, deletes them after retention, and rebuilds only the affected analytics buckets.
 - **Debug and health routes** — `/debug/recent` for recent deliveries and `/healthz` for unauthenticated health checks.
 - **Convex self-hosted** — local SQLite-backed persistence without introducing a second database yet.
@@ -172,6 +172,8 @@ After a successful login, the browser receives a signed `HttpOnly` session cooki
 
 No custom browser extension is required anymore. 🎉
 
+The refreshed dashboard keeps the same analytics routes underneath, but presents them in a more visual multi-panel shell with a left rail, featured trend view, overview stack, quick-glance cards, and recent-event table. The metric chips, summary cards, and rail controls now actively switch the focused metric/section instead of behaving like passive decoration.
+
 For scripts, curl, or any direct API client, bearer auth still works:
 
 ```text
@@ -253,7 +255,7 @@ For the full current route contract, including auth expectations, query paramete
 
 - **Auth:** bearer or dashboard session
 - **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
-- **Purpose:** built-in HTML dashboard for overview cards, a simple chart, recent events, CSV export, and logout
+- **Purpose:** built-in HTML dashboard for overview cards, a featured trend view, quick-glance metric tiles, interactive metric/section switching, recent events, CSV export, and logout
 
 ---
 
