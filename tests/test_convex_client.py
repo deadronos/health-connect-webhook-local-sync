@@ -1,3 +1,6 @@
+"""Tests for ConvexClient — the HTTP client wrapper for Convex self-hosted."""
+
+import pytest
 from unittest.mock import call, patch
 from app.convex_client import ConvexClient
 

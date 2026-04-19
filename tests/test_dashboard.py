@@ -1,8 +1,11 @@
+"""Tests for the dashboard HTML page rendering."""
+
 import pytest
 
 
 @pytest.mark.asyncio
 async def test_dashboard_requires_auth():
+    """Unauthenticated requests to /dashboard should be redirected to /login."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -17,6 +20,7 @@ async def test_dashboard_requires_auth():
 
 @pytest.mark.asyncio
 async def test_dashboard_returns_html():
+    """Authenticated requests should receive the dashboard HTML page."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -41,6 +45,7 @@ async def test_dashboard_returns_html():
 
 @pytest.mark.asyncio
 async def test_dashboard_accepts_existing_session_cookie():
+    """Requests with a valid session cookie should be authenticated without re-authorizing."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 

@@ -1,3 +1,5 @@
+"""Tests for the analytics endpoints: overview, timeseries, events, and CSV export."""
+
 from unittest.mock import patch
 
 import pytest
@@ -5,6 +7,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_overview_requires_auth():
+    """The /analytics/overview endpoint should require authentication."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -18,6 +21,7 @@ async def test_overview_requires_auth():
 
 @pytest.mark.asyncio
 async def test_overview_accepts_dashboard_session():
+    """The overview endpoint should accept a valid dashboard session cookie."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -51,6 +55,7 @@ async def test_overview_accepts_dashboard_session():
 
 @pytest.mark.asyncio
 async def test_timeseries_returns_points():
+    """The timeseries endpoint should return bucketed data points for the requested stat."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -83,6 +88,7 @@ async def test_timeseries_returns_points():
 
 @pytest.mark.asyncio
 async def test_timeseries_invalid_record_type_returns_422():
+    """The timeseries endpoint should reject invalid record types with 422."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -100,6 +106,7 @@ async def test_timeseries_invalid_record_type_returns_422():
 
 @pytest.mark.asyncio
 async def test_export_csv_returns_attachment():
+    """The export.csv endpoint should return a CSV file attachment."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -136,6 +143,7 @@ async def test_export_csv_returns_attachment():
 
 @pytest.mark.asyncio
 async def test_events_legacy_row_without_fingerprint_uses_payload_hash():
+    """Events without a fingerprint field should fall back to payload_hash for the fingerprint."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -170,6 +178,7 @@ async def test_events_legacy_row_without_fingerprint_uses_payload_hash():
 
 @pytest.mark.asyncio
 async def test_export_csv_legacy_row_without_fingerprint_uses_payload_hash():
+    """CSV export without fingerprint should fall back to payload_hash in the output."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 

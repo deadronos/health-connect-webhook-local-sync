@@ -1,13 +1,19 @@
+"""Tests for the HealthEvent model and RecordType enum."""
+
 from app.models import HealthEvent, RecordType
 
+
 def test_health_event_record_type_enum():
+    """RecordType enum values should match their string representations."""
     assert RecordType.STEPS.value == "steps"
     assert RecordType.EXERCISE.value == "exercise"
     assert RecordType.HEART_RATE.value == "heart_rate"
     assert RecordType.RESTING_HEART_RATE.value == "resting_heart_rate"
     assert RecordType.WEIGHT.value == "weight"
 
+
 def test_health_event_model():
+    """HealthEvent should accept and store all fields including metadata."""
     event = HealthEvent(
         source="health-connect-webhook",
         record_type=RecordType.STEPS,

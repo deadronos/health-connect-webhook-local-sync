@@ -1,3 +1,5 @@
+"""Normalizers that transform incoming webhook payloads into internal health event format."""
+
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -5,22 +7,51 @@ from typing import Any, Optional
 
 
 class NormalizationError(ValueError):
-    pass
+    """Raised when a payload contains unsupported or malformed record types."""
 
 
 def _now_ms() -> int:
+    """Return the current Unix timestamp in milliseconds (UTC).
+
+    Returns:
+        Current time as a Unix timestamp in milliseconds.
+    """
     return int(datetime.now(timezone.utc).timestamp() * 1000)
 
 
 def _compact_dict(value: dict[str, Any]) -> dict[str, Any]:
+    """Remove entries with None values from a dictionary.
+
+    Args:
+        value: Input dictionary potentially containing None values.
+
+    Returns:
+        A new dictionary with all None values removed.
+    """
     return {key: item for key, item in value.items() if item is not None}
 
 
 def _device_id_from_record(record: dict[str, Any]) -> Optional[str]:
+    """Extract the device_id from a record, accepting either snake_case or camelCase.
+
+    Args:
+        record: A health data record dictionary.
+
+    Returns:
+        The device_id string if present, otherwise None.
+    """
     return record.get("device_id") or record.get("deviceId")
 
 
 def _external_id_from_record(record: dict[str, Any]) -> Optional[str]:
+    """Extract the external_id from a record, accepting either snake_case or camelCase.
+
+    Args:
+        record: A health data record dictionary.
+
+    Returns:
+        The external_id string if present, otherwise None.
+    """
     return record.get("external_id") or record.get("externalId")
 
 
@@ -35,6 +66,24 @@ def _build_fingerprint(
     external_id: Optional[str],
     metadata: Optional[dict[str, Any]],
 ) -> str:
+    """Build a SHA-256 fingerprint for deduplication of a single health event.
+
+    The fingerprint is derived from the canonical form of all identifying fields,
+    ensuring the same logical event always produces the same fingerprint.
+
+    Args:
+        record_type: Type of health record (e.g., "steps").
+        value_numeric: Numeric value of the measurement.
+        unit: Unit of the measurement.
+        start_time: Start of measurement period in Unix milliseconds.
+        end_time: End of measurement period in Unix milliseconds.
+        device_id: Optional device identifier.
+        external_id: Optional external deduplication ID.
+        metadata: Optional additional structured data.
+
+    Returns:
+        A SHA-256 hex digest representing this event's fingerprint.
+    """
     fingerprint_source = _compact_dict({
         "recordType": record_type,
         "valueNumeric": float(value_numeric),
@@ -64,6 +113,25 @@ def _build_event(
     device_id: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
+    """Build a complete normalized health event dictionary.
+
+    Args:
+        raw_delivery_id: ID linking this event back to its raw delivery.
+        record_type: Type of health record.
+        value_numeric: Numeric value of the measurement.
+        unit: Unit of the measurement.
+        start_time: Start of measurement period in Unix milliseconds.
+        end_time: End of measurement period in Unix milliseconds.
+        captured_at: Time captured on device in Unix milliseconds.
+        payload_hash: SHA-256 hash of the original delivery payload.
+        created_at: Timestamp when this event was created in the system.
+        external_id: Optional external deduplication ID.
+        device_id: Optional device identifier.
+        metadata: Optional additional structured data.
+
+    Returns:
+        A fully populated event dictionary suitable for Convex ingestion.
+    """
     return _compact_dict({
         "rawDeliveryId": raw_delivery_id,
         "recordType": record_type,
@@ -91,6 +159,16 @@ def _build_event(
 
 
 class Normalizer:
+    """Normalizer for the generic webhook record format.
+
+    Transforms flat records with a "records" array into normalized health events.
+    Only supports a limited subset of record types.
+
+    Attributes:
+        SUPPORTED_TYPES: Set of record types this normalizer accepts.
+        UNIT_MAP: Default units for each supported record type.
+    """
+
     SUPPORTED_TYPES = {"steps", "heart_rate", "resting_heart_rate", "weight"}
 
     UNIT_MAP = {
@@ -101,12 +179,27 @@ class Normalizer:
     }
 
     def __init__(self, payload: dict[str, Any], payload_hash: str, delivery_id: str):
+        """Initialize the normalizer with a payload and delivery context.
+
+        Args:
+            payload: The parsed JSON webhook payload containing a "records" list.
+            payload_hash: SHA-256 hash of the original payload JSON.
+            delivery_id: Unique identifier for this delivery.
+        """
         self.payload = payload
         self.payload_hash = payload_hash
         self.delivery_id = delivery_id
         self._records: list[dict[str, Any]] = payload.get("records", [])
 
     def normalize(self) -> list[dict[str, Any]]:
+        """Transform all records in the payload into normalized health events.
+
+        Returns:
+            List of normalized event dictionaries ready for Convex ingestion.
+
+        Raises:
+            NormalizationError: If a record has an unsupported record_type.
+        """
         events: list[dict[str, Any]] = []
         created_at = _now_ms()
 
@@ -141,6 +234,9 @@ class AndroidPayloadNormalizer:
 
     Transforms the Android app's nested JSON format into internal health events.
     Each array field (steps, heart_rate, etc.) is expanded into individual events.
+
+    Attributes:
+        TYPE_KEYS: Mapping from Android payload field names to canonical record types.
     """
 
     TYPE_KEYS = {
@@ -164,11 +260,23 @@ class AndroidPayloadNormalizer:
     }
 
     def __init__(self, payload: dict[str, Any], payload_hash: str, delivery_id: str):
+        """Initialize the Android normalizer.
+
+        Args:
+            payload: The parsed JSON Android Health Connect payload.
+            payload_hash: SHA-256 hash of the original payload JSON.
+            delivery_id: Unique identifier for this delivery.
+        """
         self.payload = payload
         self.payload_hash = payload_hash
         self.delivery_id = delivery_id
 
     def normalize(self) -> list[dict[str, Any]]:
+        """Transform all record arrays in the Android payload into normalized events.
+
+        Returns:
+            List of normalized event dictionaries ready for Convex ingestion.
+        """
         events: list[dict[str, Any]] = []
         created_at = _now_ms()
 
@@ -188,6 +296,19 @@ class AndroidPayloadNormalizer:
         record_type: str,
         created_at: int,
     ) -> Optional[dict[str, Any]]:
+        """Normalize a single Android record into an event dictionary.
+
+        Dispatches to the appropriate normalization method based on record type.
+
+        Args:
+            record: The individual record from an Android payload array.
+            key: The field name in the payload (e.g., "steps", "heart_rate").
+            record_type: Canonical record type string.
+            created_at: Unix milliseconds timestamp for the creation time.
+
+        Returns:
+            A normalized event dictionary, or None if required fields are missing.
+        """
         base = {
             "raw_delivery_id": self.delivery_id,
             "record_type": record_type,
@@ -311,6 +432,19 @@ class AndroidPayloadNormalizer:
         end_time: int,
         captured_at: int,
     ) -> dict[str, Any]:
+        """Build a normalized event from a duration-based Android record.
+
+        Args:
+            base: Base dictionary with delivery and identity fields.
+            value_numeric: The measured value.
+            unit: Unit of the measurement.
+            start_time: Start of the measurement period in Unix milliseconds.
+            end_time: End of the measurement period in Unix milliseconds.
+            captured_at: Time captured on device in Unix milliseconds.
+
+        Returns:
+            A complete normalized event dictionary.
+        """
         return _build_event(
             raw_delivery_id=base["raw_delivery_id"],
             record_type=base["record_type"],
@@ -327,7 +461,20 @@ class AndroidPayloadNormalizer:
         )
 
     def _instant_event(self, base: dict[str, Any], record: dict[str, Any], value_key: str, unit: str) -> dict[str, Any]:
-        """Build an event for single-point-in-time record types."""
+        """Build an event for single-point-in-time record types.
+
+        For measurements that have no duration (e.g., heart_rate at a specific moment),
+        start_time, end_time, and captured_at all equal the instant timestamp.
+
+        Args:
+            base: Base dictionary with delivery and identity fields.
+            record: The Android record containing the measurement.
+            value_key: Key in the record containing the numeric value.
+            unit: Unit string for the measurement.
+
+        Returns:
+            A complete normalized event dictionary.
+        """
         instant = self._parse_instant(record["time"])
         return self._build_android_event(
             base,
@@ -339,6 +486,15 @@ class AndroidPayloadNormalizer:
         )
 
     def _metadata_for_record(self, key: str, record: dict[str, Any]) -> Optional[dict[str, Any]]:
+        """Extract and build metadata specific to certain record types.
+
+        Args:
+            key: The record type key (e.g., "exercise", "sleep", "nutrition").
+            record: The raw Android record dictionary.
+
+        Returns:
+            A metadata dictionary, or None if no metadata applies.
+        """
         metadata: dict[str, Any] = {}
 
         if key == "exercise" and record.get("type"):
@@ -363,6 +519,14 @@ class AndroidPayloadNormalizer:
         return metadata or None
 
     def _parse_instant(self, ts: str) -> int:
+        """Parse an ISO-8601 timestamp string into Unix milliseconds.
+
+        Args:
+            ts: ISO-8601 timestamp string, optionally with a Z suffix.
+
+        Returns:
+            Unix timestamp in milliseconds, or 0 if parsing fails.
+        """
         if not ts:
             return 0
         try:

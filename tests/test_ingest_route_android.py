@@ -1,10 +1,12 @@
 """End-to-end ingest tests for Android format with mocked Convex."""
+
 import pytest
 from unittest.mock import patch
 
 
 @pytest.fixture
 def valid_android_steps():
+    """A minimal valid Android Health Connect format payload with steps."""
     return {
         "timestamp": "2024-03-19T10:00:00Z",
         "app_version": "1.0.0",
@@ -135,6 +137,7 @@ async def test_android_format_invalid_payload_rejected():
             headers={"Authorization": "Bearer test-token"},
         )
         assert resp.status_code == 422
+
 
 @pytest.mark.asyncio
 async def test_android_exercise_ingest_passes_metadata_to_storage(mock_convex_client):

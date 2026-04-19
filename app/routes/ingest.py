@@ -1,3 +1,5 @@
+"""Main webhook ingest endpoint for receiving health data from Android and generic sources."""
+
 import hashlib
 import json
 from datetime import UTC, datetime
@@ -25,6 +27,17 @@ FALSEY_HEADER_VALUES = {"0", "false", "no", "off"}
 
 
 def _parse_test_data_header(value: str | None) -> bool | None:
+    """Parse the X-OpenClaw-Test-Data header into a boolean or None.
+
+    Args:
+        value: Raw header value, or None if the header is absent.
+
+    Returns:
+        True if the header indicates test data, False if not, None if absent.
+
+    Raises:
+        HTTPException: If the header value is present but not a recognized truthy/falsey string.
+    """
     if value is None:
         return None
 
@@ -38,6 +51,18 @@ def _parse_test_data_header(value: str | None) -> bool | None:
 
 
 def _classify_delivery_data(request: Request) -> tuple[str, str | None]:
+    """Classify a delivery as either "test" or "valid" based on headers.
+
+    A delivery is classified as "test" if the X-OpenClaw-Test-Data header is true,
+    or if the User-Agent matches the mock sender prefix.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        A tuple of (data_class, reason). data_class is "test" or "valid".
+        reason is a string describing why the classification was made, or None.
+    """
     header_value = _parse_test_data_header(request.headers.get(TEST_DATA_HEADER))
     if header_value is True:
         return "test", "header:x-openclaw-test-data"
@@ -53,6 +78,26 @@ def _classify_delivery_data(request: Request) -> tuple[str, str | None]:
 
 @router.post("/health/v1", response_model=IngestResponse)
 async def ingest_health(request: Request):
+    """Ingest health data from either an Android Health Connect app or a generic webhook source.
+
+    Accepts two payload formats:
+    - Android format: nested JSON with typed arrays (steps, heart_rate, etc.)
+    - Generic format: flat JSON with a "records" array
+
+    The endpoint authenticates via Bearer token, validates and normalizes the payload,
+    then stores the raw delivery and individual events in Convex.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        An IngestResponse with counts of received and stored records and the delivery ID.
+
+    Raises:
+        HTTPException: 401 for auth failures, 413 if body is too large,
+            422 for malformed/invalid JSON or unsupported record types,
+            500 for database errors.
+    """
     # Verify auth
     auth.require_bearer_request(request)
 

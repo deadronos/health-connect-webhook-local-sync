@@ -1,8 +1,11 @@
+"""Tests for ingest endpoint input validation and error handling."""
+
 import pytest
 
 
 @pytest.mark.asyncio
 async def test_malformed_json_rejected():
+    """Requests with invalid JSON body should be rejected with 422."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -18,6 +21,7 @@ async def test_malformed_json_rejected():
 
 @pytest.mark.asyncio
 async def test_missing_record_type_rejected():
+    """Records missing the required record_type field should be rejected with 422."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 

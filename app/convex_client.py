@@ -1,3 +1,5 @@
+"""HTTP client for interacting with a self-hosted Convex deployment."""
+
 import hashlib
 from datetime import datetime, UTC
 from typing import Optional
@@ -12,9 +14,28 @@ DEFAULT_INGEST_EVENT_BATCH_SIZE = 1000
 
 
 class ConvexClient:
-    """HTTP client for Convex self-hosted, wrapping ConvexHttpClient."""
+    """HTTP client for Convex self-hosted, wrapping ConvexHttpClient.
+
+    Provides typed methods for all Convex mutations and queries used by
+    the webhook ingest service, including raw delivery storage, health event
+    ingestion, and analytics queries.
+
+    Attributes:
+        DEFAULT_INGEST_EVENT_BATCH_SIZE: Default number of events per chunk for large deliveries.
+    """
 
     def __init__(self, convex_url: str, admin_key: str, ingest_batch_size: int = DEFAULT_INGEST_EVENT_BATCH_SIZE):
+        """Initialize the Convex HTTP client.
+
+        Args:
+            convex_url: Base URL of the Convex self-hosted deployment.
+            admin_key: Admin authentication key for Convex.
+            ingest_batch_size: Maximum number of events to send in a single
+                chunk when ingesting large deliveries (default 1000).
+
+        Raises:
+            ValueError: If ingest_batch_size is less than 1.
+        """
         # ConvexHttpClient connects to the Convex backend at :3210
         self._client = ConvexHttpClient(convex_url)
         self._client.set_admin_auth(admin_key)
@@ -24,14 +45,39 @@ class ConvexClient:
         self._ingest_batch_size = ingest_batch_size
 
     def _conv_to_json(self, args: dict) -> dict:
-        """Convert Python args to Convex-compatible format - remove None values."""
+        """Convert Python args to Convex-compatible format by removing None values.
+
+        Convex mutations reject None values for optional fields.
+
+        Args:
+            args: Dictionary of arguments to pass to a Convex mutation/query.
+
+        Returns:
+            A new dictionary with all None values removed.
+        """
         return {k: v for k, v in args.items() if v is not None}
 
     def _iter_event_chunks(self, events: list[dict]):
+        """Yield successive chunks of events of at most _ingest_batch_size.
+
+        Args:
+            events: Full list of events to split into chunks.
+
+        Yields:
+            Lists of events, each with at most _ingest_batch_size elements.
+        """
         for start in range(0, len(events), self._ingest_batch_size):
             yield events[start:start + self._ingest_batch_size]
 
     def _store_raw_delivery_payload(self, raw_delivery: dict) -> str:
+        """Store the raw delivery payload in Convex and return its ID.
+
+        Args:
+            raw_delivery: Raw delivery dictionary with status already set.
+
+        Returns:
+            The string ID of the stored raw delivery.
+        """
         result = self._client.mutation("mutations.js:storeRawDelivery", self._conv_to_json(raw_delivery))
         return str(result) if result else ""
 
@@ -41,6 +87,13 @@ class ConvexClient:
         status: str,
         error_message: Optional[str] = None,
     ) -> None:
+        """Update the status of a raw delivery in Convex.
+
+        Args:
+            raw_delivery_id: ID of the raw delivery to update.
+            status: New status string (e.g., "completed", "error", "in_progress").
+            error_message: Optional error description when status is "error".
+        """
         self._client.mutation("mutations.js:updateRawDeliveryStatus", self._conv_to_json({
             "rawDeliveryId": raw_delivery_id,
             "status": status,
@@ -48,6 +101,15 @@ class ConvexClient:
         }))
 
     def _ingest_delivery_chunk(self, raw_delivery_id: str, events: list[dict]) -> dict:
+        """Ingest a single chunk of events for a large delivery.
+
+        Args:
+            raw_delivery_id: ID of the parent raw delivery.
+            events: List of normalized event dictionaries for this chunk.
+
+        Returns:
+            Dictionary with received_records, stored_records, and duplicate_records counts.
+        """
         result = self._client.mutation("mutations.js:ingestNormalizedEventsChunk", {
             "rawDeliveryId": raw_delivery_id,
             "events": events,
@@ -65,6 +127,16 @@ class ConvexClient:
         status: str,
         error_message: Optional[str] = None,
     ) -> dict:
+        """Create a copy of a raw delivery with an updated status.
+
+        Args:
+            raw_delivery: Original raw delivery dictionary.
+            status: New status string.
+            error_message: Optional error message to set or remove.
+
+        Returns:
+            A new raw delivery dictionary with the updated status.
+        """
         next_raw_delivery = dict(raw_delivery)
         next_raw_delivery["status"] = status
         if error_message is not None:
@@ -74,6 +146,14 @@ class ConvexClient:
         return self._conv_to_json(next_raw_delivery)
 
     def _mark_raw_delivery_error_best_effort(self, raw_delivery_id: str, error_message: str) -> None:
+        """Attempt to mark a raw delivery as errored, silently ignoring failures.
+
+        Used during cleanup after a chunked ingest fails partway through.
+
+        Args:
+            raw_delivery_id: ID of the raw delivery to mark.
+            error_message: Error description to store.
+        """
         try:
             self._update_raw_delivery_status(raw_delivery_id, "error", error_message)
         except Exception:
@@ -90,6 +170,26 @@ class ConvexClient:
         data_class: str = "valid",
         data_class_reason: Optional[str] = None,
     ) -> str:
+        """Store a raw delivery record in Convex.
+
+        Computes the payload hash and received-at timestamp automatically.
+
+        Args:
+            source_ip: IP address of the request origin.
+            user_agent: User-Agent header from the ingest request.
+            payload_json: Raw JSON string of the payload.
+            record_count: Number of records in the payload.
+            status: Processing status (default "completed").
+            error_message: Optional error message for failed deliveries.
+            data_class: Classification label (default "valid", also "test").
+            data_class_reason: Optional explanation for the classification.
+
+        Returns:
+            The string ID of the stored raw delivery.
+
+        Raises:
+            Exception: If the Convex mutation fails.
+        """
         payload_hash = hashlib.sha256(payload_json.encode()).hexdigest()
         received_at = int(datetime.now(UTC).timestamp() * 1000)
         try:
@@ -110,6 +210,17 @@ class ConvexClient:
             raise Exception(f"Convex error: {e}") from e
 
     def store_health_events(self, events: list[dict]) -> list[str]:
+        """Store a batch of pre-normalized health events directly.
+
+        Args:
+            events: List of normalized event dictionaries.
+
+        Returns:
+            List of string IDs for the stored events.
+
+        Raises:
+            Exception: If the Convex mutation fails.
+        """
         if not events:
             return []
         try:
@@ -121,6 +232,23 @@ class ConvexClient:
             raise Exception(f"Convex error: {e}") from e
 
     def ingest_delivery(self, raw_delivery: dict, events: list[dict]) -> dict:
+        """Ingest a complete delivery (raw payload + normalized events) into Convex.
+
+        For small deliveries (under the batch size limit), sends events in a single
+        mutation. For large deliveries, chunks events and stores the raw delivery
+        separately first with "in_progress" status, then streams chunks.
+
+        Args:
+            raw_delivery: Dictionary with raw delivery metadata.
+            events: List of normalized event dictionaries to ingest.
+
+        Returns:
+            Dictionary with delivery_id, received_records, stored_records, and
+            duplicate_records.
+
+        Raises:
+            Exception: If Convex ingestion fails.
+        """
         try:
             if len(events) <= self._ingest_batch_size:
                 result = self._client.mutation("mutations.js:ingestNormalizedDelivery", {
@@ -164,6 +292,17 @@ class ConvexClient:
             raise Exception(f"Convex error: {e}") from e
 
     def check_duplicate(self, payload_hash: str) -> bool:
+        """Check whether a delivery with the given payload hash already exists.
+
+        Args:
+            payload_hash: SHA-256 hash of the payload JSON.
+
+        Returns:
+            True if a duplicate delivery exists, False otherwise.
+
+        Raises:
+            Exception: If the Convex mutation fails.
+        """
         try:
             result = self._client.mutation("mutations.js:checkDuplicateDelivery", {
                 "payloadHash": payload_hash,
@@ -173,6 +312,17 @@ class ConvexClient:
             raise Exception(f"Convex error: {e}") from e
 
     def list_recent_deliveries(self, limit: int = 10) -> list[dict]:
+        """Fetch the most recent raw deliveries from Convex.
+
+        Args:
+            limit: Maximum number of deliveries to return (default 10).
+
+        Returns:
+            List of raw delivery dictionaries, most recent first.
+
+        Raises:
+            Exception: If the Convex query fails.
+        """
         try:
             result = self._client.query("queries.js:listRecentDeliveries", {
                 "limit": limit,
@@ -188,6 +338,20 @@ class ConvexClient:
         record_types: Optional[list[str]] = None,
         device_id: Optional[str] = None,
     ) -> list[dict]:
+        """Fetch aggregated overview statistics for health events.
+
+        Args:
+            from_ms: Start of time window in Unix milliseconds (inclusive).
+            to_ms: End of time window in Unix milliseconds (inclusive).
+            record_types: Optional list of record types to filter by.
+            device_id: Optional device ID to filter by.
+
+        Returns:
+            List of overview card dictionaries, one per record type.
+
+        Raises:
+            Exception: If the Convex query fails.
+        """
         try:
             result = self._client.query("queries.js:getAnalyticsOverview", self._conv_to_json({
                 "fromMs": from_ms,
@@ -208,6 +372,21 @@ class ConvexClient:
         to_ms: Optional[int] = None,
         device_id: Optional[str] = None,
     ) -> list[dict]:
+        """Fetch time-bucketed analytics for a specific record type.
+
+        Args:
+            record_type: The record type to query (e.g., "steps").
+            bucket_size: Time bucket size ("hour" or "day").
+            from_ms: Start of time window in Unix milliseconds.
+            to_ms: End of time window in Unix milliseconds.
+            device_id: Optional device ID to filter by.
+
+        Returns:
+            List of time-bucketed data dictionaries.
+
+        Raises:
+            Exception: If the Convex query fails.
+        """
         try:
             result = self._client.query("queries.js:getAnalyticsTimeseries", self._conv_to_json({
                 "recordType": record_type,
@@ -229,6 +408,21 @@ class ConvexClient:
         device_id: Optional[str] = None,
         limit: int = 100,
     ) -> list[dict]:
+        """List individual health events with optional filters.
+
+        Args:
+            from_ms: Start of time window in Unix milliseconds.
+            to_ms: End of time window in Unix milliseconds.
+            record_types: Optional list of record types to filter by.
+            device_id: Optional device ID to filter by.
+            limit: Maximum number of events to return (default 100, max 1000).
+
+        Returns:
+            List of event dictionaries.
+
+        Raises:
+            Exception: If the Convex query fails.
+        """
         try:
             result = self._client.query("queries.js:listAnalyticsEvents", self._conv_to_json({
                 "fromMs": from_ms,
@@ -242,6 +436,14 @@ class ConvexClient:
             raise Exception(f"Convex error: {e}") from e
 
     def check_db_health(self) -> dict:
+        """Check the health of the Convex database connection.
+
+        Returns:
+            A dictionary with at least "ok" (bool) and "db" (str) fields.
+
+        Raises:
+            Exception: If the Convex query fails.
+        """
         try:
             result = self._client.query("queries.js:checkDbHealth", {})
             return result if isinstance(result, dict) else {}

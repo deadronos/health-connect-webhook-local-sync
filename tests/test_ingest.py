@@ -1,10 +1,12 @@
 """End-to-end ingest tests with mocked Convex."""
+
 import pytest
 from unittest.mock import patch
 
 
 @pytest.fixture
 def valid_record():
+    """A minimal valid generic-format webhook record for steps."""
     return {
         "record_type": "steps",
         "value": 1000,
@@ -135,6 +137,7 @@ async def test_multiple_records_accepted(valid_record, mock_convex_client):
 
 @pytest.mark.asyncio
 async def test_header_marks_delivery_as_test_data(valid_record, mock_convex_client):
+    """X-OpenClaw-Test-Data: true should classify the delivery as test data."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -159,6 +162,7 @@ async def test_header_marks_delivery_as_test_data(valid_record, mock_convex_clie
 
 @pytest.mark.asyncio
 async def test_mock_sender_user_agent_marks_delivery_as_test_data(valid_record, mock_convex_client):
+    """health-ingest-mock-sender User-Agent should classify delivery as test data."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -183,6 +187,7 @@ async def test_mock_sender_user_agent_marks_delivery_as_test_data(valid_record, 
 
 @pytest.mark.asyncio
 async def test_explicit_false_test_data_header_overrides_mock_sender_user_agent(valid_record, mock_convex_client):
+    """X-OpenClaw-Test-Data: false should override the mock sender User-Agent."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -208,6 +213,7 @@ async def test_explicit_false_test_data_header_overrides_mock_sender_user_agent(
 
 @pytest.mark.asyncio
 async def test_invalid_test_data_header_rejected(valid_record, mock_convex_client):
+    """X-OpenClaw-Test-Data with an unrecognized value should return 422."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 

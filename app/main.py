@@ -1,3 +1,5 @@
+"""FastAPI application entry point for the Health Connect Webhook Ingest service."""
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,12 +13,23 @@ from app.routes import analytics, browser_auth, dashboard, debug, health, ingest
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Application lifespan context manager.
+
+    Handles startup and shutdown events for the FastAPI application.
+    Currently performs no explicit startup/shutdown operations.
+    Yields control to the application, then cleans up on shutdown.
+    """
     # Startup: verify Convex connection
     yield
     # Shutdown
 
 
 def create_app() -> FastAPI:
+    """Create and configure the FastAPI application instance.
+
+    Returns:
+        A fully configured FastAPI application with middleware, routes, and static files mounted.
+    """
     static_dir = Path(__file__).resolve().parent / "static"
     settings = Settings()
 
