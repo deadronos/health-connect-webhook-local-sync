@@ -294,3 +294,57 @@ export const checkDbHealth = queryGeneric({
     }
   },
 });
+
+export const getTrend = queryGeneric({
+  args: {
+    recordType: v.string(),
+    fromMs: v.optional(v.number()),
+    toMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const fromMs = args.fromMs ?? nowMs - (7 * 24 * 60 * 60 * 1000);
+    const toMs = args.toMs ?? nowMs;
+    const windowMs = toMs - fromMs;
+    const priorFromMs = fromMs - windowMs;
+    const priorToMs = fromMs;
+
+    const currentBuckets = await ctx.db
+      .query("healthEventBuckets")
+      .withIndex("by_bucket", (q) =>
+        q.eq("bucketSize", "day").eq("recordType", args.recordType)
+      )
+      .collect();
+
+    const filteredCurrent = currentBuckets.filter(
+      (b) => b.bucketStart >= fromMs && b.bucketStart <= toMs
+    );
+    const filteredPrior = currentBuckets.filter(
+      (b) => b.bucketStart >= priorFromMs && b.bucketStart < priorToMs
+    );
+
+    const currentValue = filteredCurrent.reduce((sum, b) => sum + b.sum, 0);
+    const priorValue = filteredPrior.reduce((sum, b) => sum + b.sum, 0);
+
+    let percentChange: number | null = null;
+    let direction: "up" | "down" | "flat" = "flat";
+
+    if (priorValue > 0) {
+      percentChange = ((currentValue - priorValue) / priorValue) * 100;
+      if (Math.abs(percentChange) < 1) {
+        direction = "flat";
+      } else {
+        direction = percentChange > 0 ? "up" : "down";
+      }
+    }
+
+    return {
+      direction,
+      percentChange,
+      currentValue,
+      priorValue,
+      currentWindowMs: windowMs,
+      priorWindowMs: windowMs,
+    };
+  },
+});

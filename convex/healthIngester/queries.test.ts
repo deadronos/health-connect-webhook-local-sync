@@ -73,3 +73,45 @@ test("setHealthGoal creates a new goal and getGoalProgress returns it", async ()
   expect(goals.goals[0].targetValue).toBe(10000);
   expect(goals.goals[0].period).toBe("day");
 });
+
+test("getTrend returns up direction when current > prior", async () => {
+  const t = convexTest(schema, modules);
+  const base = Date.UTC(2024, 2, 1, 0, 0, 0, 0);
+  const deliveryId = await t.mutation(apiAny.mutations.storeRawDelivery, {
+    receivedAt: base,
+    sourceIp: "127.0.0.1",
+    payloadJson: "{}",
+    payloadHash: "trend-test",
+    status: "completed",
+    recordCount: 2,
+  });
+
+  await t.mutation(apiAny.mutations.ingestNormalizedEventsChunk, {
+    rawDeliveryId: deliveryId,
+    events: [
+      buildEvent({ capturedAt: base, payloadHash: "trend-a", fingerprint: "ta", valueNumeric: 1000 }),
+      buildEvent({ capturedAt: base + 60_000, payloadHash: "trend-b", fingerprint: "tb", valueNumeric: 2000 }),
+    ],
+  });
+
+  await t.mutation(apiAny.mutations.ingestNormalizedEventsChunk, {
+    rawDeliveryId: deliveryId,
+    events: [
+      buildEvent({ capturedAt: base + 7 * 24 * 60 * 60 * 1000, payloadHash: "trend-c", fingerprint: "tc", valueNumeric: 5000 }),
+    ],
+  });
+
+  const fromMs = base;
+  const toMs = base + (7 * 24 * 60 * 60 * 1000) - 1;
+
+  const trend = await t.query(apiAny.queries.getTrend, {
+    recordType: "steps",
+    fromMs,
+    toMs,
+  });
+
+  expect(trend.direction).toBe("up");
+  expect(trend.currentValue).toBe(5000);
+  expect(trend.priorValue).toBe(3000);
+  expect(trend.percentChange).toBeCloseTo(66.67, 1);
+});
