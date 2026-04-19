@@ -44,7 +44,7 @@ def test_ingest_delivery_uses_single_mutation_for_small_batches():
                 "userAgent": "pytest",
                 "payloadJson": '{"records": []}',
                 "payloadHash": "hash123",
-                "status": "stored",
+                "status": "completed",
                 "recordCount": 2,
                 "dataClass": "test",
                 "dataClassReason": "header:x-openclaw-test-data",
@@ -69,6 +69,7 @@ def test_ingest_delivery_uses_single_mutation_for_small_batches():
     mock_mut.assert_called_once()
     assert mock_mut.call_args[0][0] == "mutations.js:ingestNormalizedDelivery"
     assert mock_mut.call_args[0][1]["rawDelivery"]["dataClass"] == "test"
+    assert mock_mut.call_args[0][1]["rawDelivery"]["status"] == "completed"
 
 
 def test_ingest_delivery_chunks_large_batches_behind_single_raw_delivery():
@@ -90,6 +91,7 @@ def test_ingest_delivery_chunks_large_batches_behind_single_raw_delivery():
                 "storedRecords": 0,
                 "duplicateRecords": 1,
             },
+            None,
         ],
     ) as mock_mut:
         result = client.ingest_delivery(
@@ -99,7 +101,7 @@ def test_ingest_delivery_chunks_large_batches_behind_single_raw_delivery():
                 "userAgent": "pytest",
                 "payloadJson": '{"records": []}',
                 "payloadHash": "hash123",
-                "status": "stored",
+                "status": "completed",
                 "recordCount": 3,
             },
             events=[
@@ -157,7 +159,7 @@ def test_ingest_delivery_chunks_large_batches_behind_single_raw_delivery():
                 "userAgent": "pytest",
                 "payloadJson": '{"records": []}',
                 "payloadHash": "hash123",
-                "status": "stored",
+                "status": "in_progress",
                 "recordCount": 3,
             },
         ),
@@ -211,6 +213,113 @@ def test_ingest_delivery_chunks_large_batches_behind_single_raw_delivery():
                         "createdAt": 1710810800000,
                     },
                 ],
+            },
+        ),
+        call(
+            "mutations.js:updateRawDeliveryStatus",
+            {
+                "rawDeliveryId": "delivery-123",
+                "status": "completed",
+            },
+        ),
+    ]
+
+
+def test_ingest_delivery_marks_buffered_delivery_as_error_when_a_chunk_fails():
+    """Buffered ingest should leave a visible error state on the raw delivery if chunk storage fails."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key", ingest_batch_size=1)
+
+    with patch.object(
+        client._client,
+        "mutation",
+        side_effect=[
+            "delivery-123",
+            RuntimeError("chunk failed"),
+            None,
+        ],
+    ) as mock_mut:
+        try:
+            client.ingest_delivery(
+                raw_delivery={
+                    "receivedAt": 1710803600000,
+                    "sourceIp": "127.0.0.1",
+                    "userAgent": "pytest",
+                    "payloadJson": '{"records": []}',
+                    "payloadHash": "hash123",
+                    "status": "completed",
+                    "recordCount": 2,
+                },
+                events=[
+                    {
+                        "rawDeliveryId": "placeholder",
+                        "recordType": "steps",
+                        "valueNumeric": 1000.0,
+                        "unit": "count",
+                        "startTime": 1710800000000,
+                        "endTime": 1710803600000,
+                        "capturedAt": 1710803600000,
+                        "payloadHash": "hash123",
+                        "fingerprint": "fingerprint-123",
+                        "createdAt": 1710803600000,
+                    },
+                    {
+                        "rawDeliveryId": "placeholder",
+                        "recordType": "steps",
+                        "valueNumeric": 500.0,
+                        "unit": "count",
+                        "startTime": 1710803600000,
+                        "endTime": 1710807200000,
+                        "capturedAt": 1710807200000,
+                        "payloadHash": "hash123",
+                        "fingerprint": "fingerprint-456",
+                        "createdAt": 1710807200000,
+                    },
+                ],
+            )
+        except RuntimeError as exc:
+            assert str(exc) == "chunk failed"
+        else:
+            assert False, "ingest_delivery should re-raise the chunk failure"
+
+    assert mock_mut.call_args_list == [
+        call(
+            "mutations.js:storeRawDelivery",
+            {
+                "receivedAt": 1710803600000,
+                "sourceIp": "127.0.0.1",
+                "userAgent": "pytest",
+                "payloadJson": '{"records": []}',
+                "payloadHash": "hash123",
+                "status": "in_progress",
+                "recordCount": 2,
+            },
+        ),
+        call(
+            "mutations.js:ingestNormalizedEventsChunk",
+            {
+                "rawDeliveryId": "delivery-123",
+                "events": [
+                    {
+                        "rawDeliveryId": "placeholder",
+                        "recordType": "steps",
+                        "valueNumeric": 1000.0,
+                        "unit": "count",
+                        "startTime": 1710800000000,
+                        "endTime": 1710803600000,
+                        "capturedAt": 1710803600000,
+                        "payloadHash": "hash123",
+                        "fingerprint": "fingerprint-123",
+                        "createdAt": 1710803600000,
+                    },
+                ],
+            },
+        ),
+        call(
+            "mutations.js:updateRawDeliveryStatus",
+            {
+                "rawDeliveryId": "delivery-123",
+                "status": "error",
+                "errorMessage": "chunk failed",
             },
         ),
     ]

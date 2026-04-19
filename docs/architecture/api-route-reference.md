@@ -236,6 +236,7 @@ Behavior notes:
 - `received_records` reports validated incoming record count.
 - `stored_records` reports how many non-duplicate normalized events were stored.
 - Raw deliveries are recorded once per accepted request, even when large normalized event sets are chunked internally or some events dedupe away.
+- Buffered raw deliveries transition through `in_progress` and then `completed` or `error` on the same row so partial chunk failures remain visible in debug views.
 - Canonical events include `fingerprint`, optional `deviceId`, optional `externalId`, and optional `metadata`.
 - `X-OpenClaw-Test-Data: true` marks the stored raw delivery as `test`, making it eligible for scheduled Convex cleanup after the retention window.
 - The bundled `tools/mock_sender.py` uses a dedicated mock-sender user agent and sends the test-data header by default; `X-OpenClaw-Test-Data: false` overrides that classification.
@@ -261,11 +262,16 @@ Success example:
       "delivery_id": "delivery-123",
       "received_at": "2026-04-19T10:15:00Z",
       "record_count": 4,
-      "status": "stored"
+      "status": "completed"
     }
   ]
 }
 ```
+
+Behavior notes:
+
+- recent deliveries may report `in_progress`, `completed`, or `error`
+- older rows created before the lifecycle hardening may still appear as legacy `stored`
 
 ## `GET /login`
 

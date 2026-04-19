@@ -18,17 +18,19 @@ const buildRawDelivery = ({
   receivedAt,
   payloadHash,
   recordCount,
+  status = "completed",
 }: {
   receivedAt: number;
   payloadHash: string;
   recordCount: number;
+  status?: "stored" | "in_progress" | "completed" | "error";
 }) => ({
   receivedAt,
   sourceIp: "127.0.0.1",
   userAgent: "vitest",
   payloadJson: `{"payloadHash":"${payloadHash}"}`,
   payloadHash,
-  status: "stored" as const,
+  status,
   recordCount,
   dataClass: "valid" as const,
 });
@@ -68,6 +70,7 @@ test("ingestNormalizedEventsChunk keeps one delivery and dedupes across chunk bo
     receivedAt: capturedAt,
     payloadHash: "buffered-delivery",
     recordCount: 4,
+    status: "in_progress",
   }));
 
   const firstChunk = await t.mutation(apiAny.mutations.ingestNormalizedEventsChunk, {
@@ -118,6 +121,17 @@ test("ingestNormalizedEventsChunk keeps one delivery and dedupes across chunk bo
   expect(deliveries).toHaveLength(1);
   expect(deliveries[0].deliveryId).toBe(deliveryId);
   expect(deliveries[0].recordCount).toBe(4);
+  expect(deliveries[0].status).toBe("in_progress");
+
+  await t.mutation(apiAny.mutations.updateRawDeliveryStatus, {
+    rawDeliveryId: deliveryId,
+    status: "completed",
+  });
+
+  const completedDelivery = await t.query(apiAny.queries.getDeliveryById, {
+    deliveryId,
+  });
+  expect(completedDelivery.status).toBe("completed");
 
   const events = await t.query(apiAny.queries.getHealthEventsByDelivery, {
     rawDeliveryId: deliveryId,

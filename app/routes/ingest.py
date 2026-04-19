@@ -158,7 +158,7 @@ async def ingest_health(request: Request):
                 "userAgent": user_agent,
                 "payloadJson": payload_json,
                 "payloadHash": payload_hash,
-                "status": "stored",
+                "status": "completed",
                 "recordCount": received_records,
                 "dataClass": data_class,
                 "dataClassReason": data_class_reason,

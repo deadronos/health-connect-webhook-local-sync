@@ -31,7 +31,7 @@ const buildRawDelivery = ({
   userAgent: "pytest",
   payloadJson: `{"payloadHash":"${payloadHash}"}`,
   payloadHash,
-  status: "stored" as const,
+  status: "completed" as const,
   recordCount: 1,
   dataClass,
   ...(dataClass === "test" ? { dataClassReason: "header:x-openclaw-test-data" } : {}),

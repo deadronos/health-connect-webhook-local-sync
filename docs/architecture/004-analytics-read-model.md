@@ -74,7 +74,7 @@ A Postgres migration makes sense later if the read model needs richer joins, mor
 - bucket updates can become hot writes under heavier concurrency
 - some analytics queries may still need event scans when bucket dimensions are not sufficient
 - the read model is intentionally modest and not a replacement for a full analytics database
-- very large historical deliveries are only logically atomic; once the raw delivery is stored, later event chunks rely on event-level idempotency rather than one all-or-nothing Convex execution
+- very large historical deliveries are only logically atomic; once the raw delivery is stored, later event chunks rely on event-level idempotency rather than one all-or-nothing Convex execution, so the raw delivery now exposes an `in_progress` / `completed` / `error` lifecycle for visibility
 
 ---
 

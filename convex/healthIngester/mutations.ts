@@ -2,6 +2,12 @@ import { mutationGeneric } from "convex/server";
 import { v } from "convex/values";
 
 const dataClassValidator = v.union(v.literal("valid"), v.literal("test"));
+const rawDeliveryStatusValidator = v.union(
+  v.literal("stored"),
+  v.literal("in_progress"),
+  v.literal("completed"),
+  v.literal("error"),
+);
 
 const recordTypeValidator = v.union(
   v.literal("steps"),
@@ -29,7 +35,7 @@ const rawDeliveryValidator = {
   userAgent: v.optional(v.string()),
   payloadJson: v.string(),
   payloadHash: v.string(),
-  status: v.union(v.literal("stored"), v.literal("error")),
+  status: rawDeliveryStatusValidator,
   errorMessage: v.optional(v.string()),
   recordCount: v.number(),
   dataClass: v.optional(dataClassValidator),
@@ -60,7 +66,7 @@ type RawDelivery = {
   userAgent?: string;
   payloadJson: string;
   payloadHash: string;
-  status: "stored" | "error";
+  status: "stored" | "in_progress" | "completed" | "error";
   errorMessage?: string;
   recordCount: number;
   dataClass?: "valid" | "test";
@@ -330,6 +336,21 @@ export const ingestNormalizedEventsChunk = mutationGeneric({
   },
   handler: async (ctx, args) => {
     return ingestEventsIntoDelivery(ctx, args.rawDeliveryId, args.events as HealthEvent[]);
+  },
+});
+
+export const updateRawDeliveryStatus = mutationGeneric({
+  args: {
+    rawDeliveryId: v.string(),
+    status: rawDeliveryStatusValidator,
+    errorMessage: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.rawDeliveryId as any, {
+      status: args.status,
+      ...(args.errorMessage !== undefined ? { errorMessage: args.errorMessage } : {}),
+    });
+    return args.rawDeliveryId;
   },
 });
 
