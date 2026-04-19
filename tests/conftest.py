@@ -11,6 +11,9 @@ os.environ["CONVEX_SELF_HOSTED_URL"] = "http://127.0.0.1:3210"
 os.environ["CONVEX_SELF_HOSTED_ADMIN_KEY"] = "test-admin-key"
 os.environ["ENABLE_DEBUG_ROUTES"] = "true"
 os.environ["ENABLE_ANALYTICS_ROUTES"] = "true"
+os.environ["SESSION_SECRET"] = "test-session-secret"
+os.environ["SESSION_COOKIE_NAME"] = "hc_test_session"
+os.environ["SESSION_MAX_AGE_SECONDS"] = "3600"
 
 
 @pytest.fixture

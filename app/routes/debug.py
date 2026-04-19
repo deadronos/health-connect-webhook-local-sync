@@ -22,8 +22,7 @@ async def debug_recent(request: Request, limit: int = Query(default=10, ge=1, le
     if not settings.enable_debug_routes:
         raise HTTPException(status_code=404, detail="Debug routes disabled")
 
-    auth_header = request.headers.get("authorization")
-    auth.verify(auth_header)
+    auth.require_bearer_request(request)
 
     deliveries = client.list_recent_deliveries(limit=limit)
     return DebugResponse(

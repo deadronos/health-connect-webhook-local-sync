@@ -1,4 +1,4 @@
-# ADR-003: Bearer Token Auth for MVP
+# ADR-003: Bearer Token Auth as the Primary Shared Credential
 
 **Date:** 2026-04-18
 **Status:** Accepted
@@ -21,7 +21,9 @@ Security options considered:
 
 ## Decision
 
-Use a **single static bearer token** (`INGEST_TOKEN` env var) as the auth mechanism for the current local-first system.
+Use a **single static bearer token** (`INGEST_TOKEN` env var) as the primary shared credential for the current local-first system.
+
+This credential remains the direct auth mechanism for sender-style and inspection routes, and it is also the credential exchanged by the browser login flow described in ADR-005.
 
 ---
 
@@ -39,6 +41,8 @@ Against those threats, a bearer token is sufficient. HMAC or per-device tokens a
 ### Simplicity
 
 Bearer token auth requires no sender-side signing logic. That keeps the Android app and the local tooling loosely coupled while the webhook format is still evolving.
+
+The same shared token also gives the browser a low-friction login credential without inventing a second secret just for the dashboard UI.
 
 ### Reversibility
 
@@ -58,12 +62,14 @@ The project still leaves room for later HMAC signatures, per-device tokens, or s
 - works with the mock sender and local dashboard tooling
 - token rotation is straightforward
 - no sender-side code changes required for MVP and phase 2
+- the browser login flow can reuse the same shared credential rather than introducing a second user-facing password
 
 ### Negative
 
 - a single token means authorized senders are not distinguishable by auth alone
 - there is no per-device auth audit trail yet
 - tokens live in process environment configuration
+- the shared credential still needs careful handling when it is entered manually into a browser login form
 
 ---
 
@@ -79,13 +85,18 @@ The project still leaves room for later HMAC signatures, per-device tokens, or s
 
 ## Notes
 
-The bearer token is checked via simple string equality (`parts[1] == self.token`). Constant-time comparison was considered but not implemented because a practical timing attack against this local deployment is not the current threat model.
+The bearer token is checked with constant-time string comparison in `app/auth.py`.
 
-Protected routes currently using the bearer token:
+Direct bearer-only routes currently using the token:
 
 - `POST /ingest/health/v1`
 - `GET /debug/recent`
+
+Routes that accept either a bearer header or a signed browser session cookie:
+
 - `GET /analytics/**`
 - `GET /dashboard`
+
+The browser login flow itself is documented in ADR-005 and keeps session auth scoped to dashboard + analytics reads.
 
 The health check (`GET /healthz`) is intentionally unauthenticated so it can remain a simple probe for load balancers and health checks.

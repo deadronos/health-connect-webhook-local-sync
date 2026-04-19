@@ -3,8 +3,10 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
-from app.routes import analytics, dashboard, debug, health, ingest
+from app.config import Settings
+from app.routes import analytics, browser_auth, dashboard, debug, health, ingest
 
 
 @asynccontextmanager
@@ -16,17 +18,27 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     static_dir = Path(__file__).resolve().parent / "static"
+    settings = Settings()
 
     app = FastAPI(
         title="Health Connect Webhook Ingest",
         version="0.1.0",
         lifespan=lifespan,
     )
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.session_secret,
+        session_cookie=settings.session_cookie_name,
+        max_age=settings.session_max_age_seconds,
+        same_site="lax",
+        https_only=settings.session_https_only,
+    )
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     app.include_router(health.router)
     app.include_router(ingest.router)
     app.include_router(debug.router)
     app.include_router(analytics.router)
+    app.include_router(browser_auth.router)
     app.include_router(dashboard.router)
     return app
 

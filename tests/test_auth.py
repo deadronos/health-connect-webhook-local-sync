@@ -24,3 +24,10 @@ def test_empty_header_raises():
     with pytest.raises(HTTPException) as exc_info:
         auth.verify("")
     assert exc_info.value.status_code == 401
+
+
+def test_missing_form_token_raises():
+    auth = BearerAuth(token="secret")
+    with pytest.raises(HTTPException) as exc_info:
+        auth.verify_token(None)
+    assert exc_info.value.status_code == 401

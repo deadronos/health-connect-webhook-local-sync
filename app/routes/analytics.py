@@ -33,7 +33,7 @@ def _validate_request(request: Request, from_ms: Optional[int], to_ms: Optional[
     if not settings.enable_analytics_routes:
         raise HTTPException(status_code=404, detail="Analytics routes disabled")
 
-    auth.verify(request.headers.get("authorization"))
+    auth.require_dashboard_access(request)
 
     if from_ms is not None and to_ms is not None and from_ms > to_ms:
         raise HTTPException(status_code=422, detail="from_ms must be less than or equal to to_ms")

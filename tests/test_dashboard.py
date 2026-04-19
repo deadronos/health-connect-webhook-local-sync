@@ -11,7 +11,8 @@ async def test_dashboard_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/dashboard")
 
-    assert response.status_code == 401
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login?next=%2Fdashboard"
 
 
 @pytest.mark.asyncio
@@ -29,4 +30,24 @@ async def test_dashboard_returns_html():
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
+    assert "Health Analytics Dashboard" in response.text
+    assert "hc_test_session=" in response.headers["set-cookie"]
+
+
+@pytest.mark.asyncio
+async def test_dashboard_accepts_existing_session_cookie():
+    from httpx import ASGITransport, AsyncClient
+    from app.main import create_app
+
+    app = create_app()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        login_response = await client.post(
+            "/login",
+            data={"token": "test-token", "next": "/dashboard"},
+        )
+        response = await client.get("/dashboard")
+
+    assert login_response.status_code == 303
+    assert response.status_code == 200
     assert "Health Analytics Dashboard" in response.text
