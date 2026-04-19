@@ -1,6 +1,6 @@
 import hashlib
 import json
-import uuid
+from datetime import UTC, datetime
 from fastapi import APIRouter, Request, HTTPException
 
 from app.auth import BearerAuth
@@ -98,60 +98,45 @@ async def ingest_health(request: Request):
             raise HTTPException(status_code=422, detail=f"Invalid payload: {e}")
         received_records = len(ingest_req.records)
 
-    # Compute hash and delivery ID
+    # Compute hash and provisional delivery ID for normalization.
     payload_json = json.dumps(payload, sort_keys=True)
     payload_hash = hashlib.sha256(payload_json.encode()).hexdigest()
-    delivery_id = str(uuid.uuid4())[:8]
+    provisional_delivery_id = payload_hash[:8]
 
-    # Store raw delivery
     source_ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent")
 
-    try:
-        stored_delivery_id = client.store_raw_delivery(
-            source_ip=source_ip,
-            user_agent=user_agent,
-            payload_json=payload_json,
-            record_count=received_records,
-            status="stored",
-        )
-    except Exception as e:
-        try:
-            client.store_raw_delivery(
-                source_ip=source_ip,
-                user_agent=user_agent,
-                payload_json=payload_json,
-                record_count=0,
-                status="error",
-                error_message=str(e),
-            )
-        except Exception:
-            pass
-        raise HTTPException(status_code=500, detail="Database error")
-
-    # Normalize and store events
     if is_android_format:
         normalizer = AndroidPayloadNormalizer(
-            payload=payload, payload_hash=payload_hash, delivery_id=stored_delivery_id
+            payload=payload, payload_hash=payload_hash, delivery_id=provisional_delivery_id
         )
     else:
-        normalizer = Normalizer(payload=payload, payload_hash=payload_hash, delivery_id=stored_delivery_id)
+        normalizer = Normalizer(payload=payload, payload_hash=payload_hash, delivery_id=provisional_delivery_id)
+
     try:
         events = normalizer.normalize()
     except NormalizationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    stored_count = 0
-    if events:
-        try:
-            client.store_health_events(events)
-            stored_count = len(events)
-        except Exception:
-            pass  # Log but don't fail — raw delivery succeeded
+    try:
+        result = client.ingest_delivery(
+            raw_delivery={
+                "receivedAt": int(datetime.now(UTC).timestamp() * 1000),
+                "sourceIp": source_ip,
+                "userAgent": user_agent,
+                "payloadJson": payload_json,
+                "payloadHash": payload_hash,
+                "status": "stored",
+                "recordCount": received_records,
+            },
+            events=events,
+        )
+    except Exception:
+        raise HTTPException(status_code=500, detail="Database error")
 
     return IngestResponse(
         ok=True,
         received_records=received_records,
-        stored_records=stored_count,
-        delivery_id=stored_delivery_id,
+        stored_records=result["stored_records"],
+        delivery_id=result["delivery_id"],
     )

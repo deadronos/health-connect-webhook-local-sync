@@ -21,6 +21,25 @@ def test_normalize_steps():
     assert events[0]["valueNumeric"] == 8421.0
     assert events[0]["unit"] == "count"
 
+def test_flat_record_preserves_device_id_and_fingerprint():
+    payload = {
+        "records": [
+            {
+                "record_type": "steps",
+                "value": 1000,
+                "unit": "count",
+                "start_time_ms": 1710800000000,
+                "end_time_ms": 1710803600000,
+                "device_id": "pixel-watch",
+            }
+        ]
+    }
+    normalizer = Normalizer(payload, "hash123", "delivery456")
+    event = normalizer.normalize()[0]
+
+    assert event["deviceId"] == "pixel-watch"
+    assert isinstance(event["fingerprint"], str)
+    assert event["fingerprint"]
 def test_normalize_heart_rate():
     payload = {
         "records": [

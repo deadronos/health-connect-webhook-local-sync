@@ -18,8 +18,12 @@ def valid_record():
 def mock_convex_client():
     """Mock ConvexClient methods used by the ingest route."""
     with patch("app.routes.ingest.client") as mock_client:
-        mock_client.store_raw_delivery.return_value = "test-delivery-id"
-        mock_client.store_health_events.return_value = ["test-event-id"]
+        mock_client.ingest_delivery.return_value = {
+            "delivery_id": "test-delivery-id",
+            "received_records": 1,
+            "stored_records": 1,
+            "duplicate_records": 0,
+        }
         yield mock_client
 
 

@@ -8,9 +8,10 @@
 
 ## Context
 
-The ingest endpoint `POST /ingest/health/v1` receives webhook payloads from a single known sender (the Android Health Connect app). It must reject unauthorized requests.
+The service exposes protected local routes for ingest, debugging, analytics, and the built-in dashboard. It must reject unauthorized requests without forcing complex sender-side changes.
 
 Security options considered:
+
 1. **Static bearer token** — single secret in `INGEST_TOKEN`, checked on every request
 2. **HMAC signature header** — sender signs requests with a shared secret; server verifies
 3. **Per-device tokens** — each sender device gets its own token
@@ -20,61 +21,71 @@ Security options considered:
 
 ## Decision
 
-Use a **single static bearer token** (`INGEST_TOKEN` env var) as the auth mechanism for MVP.
+Use a **single static bearer token** (`INGEST_TOKEN` env var) as the auth mechanism for the current local-first system.
 
 ---
 
 ## Reasons
 
-### Proportional to Threat Model
+### Proportional to the threat model
 
-The service runs on `127.0.0.1:8787`. The primary threat is:
-- Accidental exposure (another local app accidentally posting malformed data)
-- Script kiddie / fuzzing (unauthorized scanning tools)
+The service runs on `127.0.0.1:8787`. The primary threats are:
 
-Against these, a bearer token is sufficient. HMAC or per-device tokens add complexity without proportional benefit for a local-only service.
+- accidental local misuse
+- unauthorized scans or fuzzing
+
+Against those threats, a bearer token is sufficient. HMAC or per-device tokens add complexity without proportional local-only value.
 
 ### Simplicity
 
-Bearer token auth requires zero setup beyond setting an env var. HMAC requires the sender to sign payloads with a shared secret — which means changes to the Android app. For an MVP that wants to iterate quickly, that coupling is undesirable.
+Bearer token auth requires no sender-side signing logic. That keeps the Android app and the local tooling loosely coupled while the webhook format is still evolving.
 
 ### Reversibility
 
-If a token is compromised, rotating it is a one-line env var change. HMAC key rotation requires the same, but also assumes the sender can be updated to use the new key — which may not be true for a phone/watch app.
+If a token is compromised, rotating it is just an env var change. Stronger schemes can still be introduced later without invalidating the current route structure.
 
-### Planned for Later
+### Planned future hardening remains possible
 
-The `idea.md` explicitly lists future enhancements (HMAC signatures, per-device tokens, IP allowlist) as non-MVP items. This decision defers that complexity without preventing it.
+The project still leaves room for later HMAC signatures, per-device tokens, or stricter network controls when the threat model or deployment shape changes.
 
 ---
 
 ## Consequences
 
 ### Positive
-- Dead simple to implement and test
-- Works with the mock sender trivially
-- Token rotation is a one-line change
-- No sender-side code changes required
+
+- dead simple to implement and test
+- works with the mock sender and local dashboard tooling
+- token rotation is straightforward
+- no sender-side code changes required for MVP and phase 2
 
 ### Negative
-- Single token means any authorized sender can impersonate any other
-- No audit trail of which device sent a request
-- Token appears in process env — visible in `/proc/*/environ` on Linux systems
+
+- a single token means authorized senders are not distinguishable by auth alone
+- there is no per-device auth audit trail yet
+- tokens live in process environment configuration
 
 ---
 
 ## Alternatives Considered
 
 | Option | Why Not Chosen |
-|--------|---------------|
-| HMAC signature | Requires sender app changes; over-engineered for local MVP |
-| Per-device tokens | No multi-device scenario in MVP; adds token management complexity |
-| IP allowlist | Local IPs are trivial to spoof; doesn't add real security |
+| ------ | -------------- |
+| HMAC signature | Requires sender app changes; over-engineered for the current local scope |
+| Per-device tokens | No strong multi-device auth requirement yet; adds token management complexity |
+| IP allowlist | Weak protection for local workflows and easy to misconfigure |
 
 ---
 
 ## Notes
 
-The bearer token is checked via a simple string equality (`parts[1] == self.token`). Constant-time comparison was considered but not implemented for MVP — if a timing attack against `127.0.0.1` is a real threat, the threat model has bigger problems.
+The bearer token is checked via simple string equality (`parts[1] == self.token`). Constant-time comparison was considered but not implemented because a practical timing attack against this local deployment is not the current threat model.
 
-The debug route (`GET /debug/recent`) also requires auth — same bearer token. The health check (`GET /healthz`) is unauthenticated, which is intentional: it's meant to be a simple probe for load balancers and health checks.
+Protected routes currently using the bearer token:
+
+- `POST /ingest/health/v1`
+- `GET /debug/recent`
+- `GET /analytics/**`
+- `GET /dashboard`
+
+The health check (`GET /healthz`) is intentionally unauthenticated so it can remain a simple probe for load balancers and health checks.

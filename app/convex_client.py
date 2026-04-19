@@ -58,6 +58,21 @@ class ConvexClient:
         except ConvexError as e:
             raise Exception(f"Convex error: {e}") from e
 
+    def ingest_delivery(self, raw_delivery: dict, events: list[dict]) -> dict:
+        try:
+            result = self._client.mutation("mutations.js:ingestNormalizedDelivery", {
+                "rawDelivery": self._conv_to_json(raw_delivery),
+                "events": events,
+            })
+            return {
+                "delivery_id": str(result["deliveryId"]),
+                "received_records": int(result["receivedRecords"]),
+                "stored_records": int(result["storedRecords"]),
+                "duplicate_records": int(result.get("duplicateRecords", 0)),
+            }
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
+
     def check_duplicate(self, payload_hash: str) -> bool:
         try:
             result = self._client.mutation("mutations.js:checkDuplicateDelivery", {
@@ -72,6 +87,66 @@ class ConvexClient:
             result = self._client.query("queries.js:listRecentDeliveries", {
                 "limit": limit,
             })
+            return result if isinstance(result, list) else []
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
+
+    def get_analytics_overview(
+        self,
+        from_ms: Optional[int] = None,
+        to_ms: Optional[int] = None,
+        record_types: Optional[list[str]] = None,
+        device_id: Optional[str] = None,
+    ) -> list[dict]:
+        try:
+            result = self._client.query("queries.js:getAnalyticsOverview", self._conv_to_json({
+                "fromMs": from_ms,
+                "toMs": to_ms,
+                "recordTypes": record_types,
+                "deviceId": device_id,
+            }))
+            return result if isinstance(result, list) else []
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
+
+    def get_analytics_timeseries(
+        self,
+        *,
+        record_type: str,
+        bucket_size: str,
+        from_ms: Optional[int] = None,
+        to_ms: Optional[int] = None,
+        device_id: Optional[str] = None,
+    ) -> list[dict]:
+        try:
+            result = self._client.query("queries.js:getAnalyticsTimeseries", self._conv_to_json({
+                "recordType": record_type,
+                "bucketSize": bucket_size,
+                "fromMs": from_ms,
+                "toMs": to_ms,
+                "deviceId": device_id,
+            }))
+            return result if isinstance(result, list) else []
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
+
+    def list_analytics_events(
+        self,
+        *,
+        from_ms: Optional[int] = None,
+        to_ms: Optional[int] = None,
+        record_types: Optional[list[str]] = None,
+        device_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        try:
+            result = self._client.query("queries.js:listAnalyticsEvents", self._conv_to_json({
+                "fromMs": from_ms,
+                "toMs": to_ms,
+                "recordTypes": record_types,
+                "deviceId": device_id,
+                "limit": limit,
+            }))
             return result if isinstance(result, list) else []
         except ConvexError as e:
             raise Exception(f"Convex error: {e}") from e

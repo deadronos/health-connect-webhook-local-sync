@@ -5,18 +5,16 @@ This repo exists to be a local ingest and normalization boundary between Android
 ## Current State
 
 - The MVP works today: FastAPI ingest, bearer-token auth, Convex-backed persistence, health/debug routes, fixtures, mock sender, and pytest coverage.
-- The stack is intentionally local-first and lightweight: one Python service, one Convex backend, no queue, no separate frontend app, no Postgres.
-- The service is still primarily an ingest/debug layer rather than a full analytics product.
+- Phase 2 is now shipped: idempotent ingest writes, fingerprinted canonical events, hour/day rollup buckets, authenticated `/analytics/**` APIs, and a built-in `/dashboard` page.
+- The stack is intentionally local-first and lightweight: one Python service, one Convex backend, no queue, no separate frontend build pipeline, and no Postgres.
 
-## Next
+## Next Likely Focus
 
-The next committed phase is a Convex-first analytics and dashboard pass.
+With the built-in analytics pass complete, the next work should focus on sharpening the edges rather than adding another major surface area.
 
-- Keep Convex as the system of record for now.
-- Harden ingest for a few devices and moderate retry bursts with better idempotency and duplicate handling.
-- Add rollup buckets and analytics read APIs for overview, time series, recent events, and CSV export.
-- Add a built-in FastAPI-served dashboard instead of spinning up a separate frontend stack.
-- Keep auth simple: bearer token on `/analytics/**` and `/dashboard`, just like the existing protected routes.
+- Improve device-aware analytics if per-device filtering needs dedicated rollups instead of event scans.
+- Decide whether dashboard charts need richer dimensions before adding more route-specific queries.
+- Keep Convex as the default until real contention or query complexity justifies migration pressure.
 
 ## Future Possible Enhancements
 
