@@ -115,6 +115,10 @@ const aggregateEventsIntoBuckets = (events: any[], bucketSize: BucketSize): any[
     }));
 };
 
+const eventFingerprint = (event: any): string => {
+  return event.fingerprint ?? event.payloadHash;
+};
+
 export const listRecentDeliveries = queryGeneric({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -273,7 +277,7 @@ export const listAnalyticsEvents = queryGeneric({
         deviceId: event.deviceId,
         externalId: event.externalId,
         payloadHash: event.payloadHash,
-        fingerprint: event.fingerprint,
+        fingerprint: eventFingerprint(event),
         metadata: event.metadata,
       }));
   },

@@ -40,6 +40,7 @@ def _validate_request(request: Request, from_ms: Optional[int], to_ms: Optional[
 
 
 def _to_analytics_event(event: dict) -> AnalyticsEvent:
+    fingerprint = event.get("fingerprint") or event["payloadHash"]
     return AnalyticsEvent(
         raw_delivery_id=event["rawDeliveryId"],
         record_type=event["recordType"],
@@ -51,7 +52,7 @@ def _to_analytics_event(event: dict) -> AnalyticsEvent:
         device_id=event.get("deviceId"),
         external_id=event.get("externalId"),
         payload_hash=event["payloadHash"],
-        fingerprint=event["fingerprint"],
+        fingerprint=fingerprint,
         metadata=event.get("metadata"),
     )
 
