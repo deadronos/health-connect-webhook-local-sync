@@ -128,7 +128,7 @@ Notes:
 
 ## `POST /ingest/health/v1`
 
-- **Purpose:** primary write endpoint for webhook deliveries. It authenticates the request, validates the payload, auto-detects flat vs Android shape, normalizes records, and uses one Convex mutation to store the raw delivery, dedupe events by fingerprint, and update rollup buckets.
+- **Purpose:** primary write endpoint for webhook deliveries. It authenticates the request, validates the payload, auto-detects flat vs Android shape, normalizes records, and uses a Convex write path that stores one raw delivery, dedupes events by fingerprint, and updates rollup buckets. Large normalized event sets are chunked internally across multiple event mutations to stay within Convex execution limits.
 - **Auth:** required.
 
 Headers:
@@ -235,7 +235,7 @@ Behavior notes:
 - Android format is auto-detected when `records` is absent and one or more Android-specific top-level keys are present.
 - `received_records` reports validated incoming record count.
 - `stored_records` reports how many non-duplicate normalized events were stored.
-- Raw deliveries are recorded through the atomic ingest mutation, even when some normalized events dedupe away.
+- Raw deliveries are recorded once per accepted request, even when large normalized event sets are chunked internally or some events dedupe away.
 - Canonical events include `fingerprint`, optional `deviceId`, optional `externalId`, and optional `metadata`.
 - `X-OpenClaw-Test-Data: true` marks the stored raw delivery as `test`, making it eligible for scheduled Convex cleanup after the retention window.
 - The bundled `tools/mock_sender.py` uses a dedicated mock-sender user agent and sends the test-data header by default; `X-OpenClaw-Test-Data: false` overrides that classification.

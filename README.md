@@ -35,9 +35,9 @@ flowchart LR
     sender -->|"POST /ingest/health/v1\nBearer token"| auth
     auth --> normalizers
     normalizers --> client
-    client -->|"ingestNormalizedDelivery"| raw
-    client --> events
-    client --> buckets
+    client -->|"storeRawDelivery"| raw
+    client -->|"ingestNormalizedDelivery\nor ingestNormalizedEventsChunk*"| events
+    client -->|"update hour/day buckets"| buckets
 
     browser -->|"GET /login\nPOST INGEST_TOKEN"| login
     login -->|"signed session cookie"| dashboard
@@ -65,7 +65,7 @@ flowchart LR
 2. The payload is validated and auto-detected as either flat `records` format or nested Android format.
 3. The normalizer emits canonical events with `deviceId`, `fingerprint`, and optional `metadata`.
 4. Ingest classifies the delivery as `valid` or `test` based on the optional `X-OpenClaw-Test-Data` header and the mock-sender user agent.
-5. A single Convex mutation stores the raw delivery, inserts only new events by fingerprint, and updates `hour`/`day` rollup buckets.
+5. Small/moderate deliveries use a single Convex mutation; large historical batches buffer normalized events into chunked Convex event mutations after one raw-delivery write so each execution stays under Convex limits.
 6. A Convex cron later removes expired `test` deliveries and rebuilds only the affected buckets.
 7. The response shape stays stable:
 
@@ -82,7 +82,7 @@ flowchart LR
 
 ## Features
 
-- **Idempotent ingest** — one Convex mutation stores the raw delivery, dedupes events by fingerprint, and updates analytics buckets.
+- **Idempotent ingest** — small deliveries use one Convex mutation, while large historical payloads buffer events into chunked Convex writes without creating extra raw-delivery audit rows.
 - **Canonical event contract** — normalized events preserve `deviceId`, `externalId`, `fingerprint`, and optional `metadata`.
 - **Dual payload support** — accepts both legacy flat `records` payloads and nested Android Health Connect payloads.
 - **Analytics JSON APIs** — authenticated `/analytics/overview`, `/analytics/timeseries`, `/analytics/events`, and `/analytics/export.csv` with bearer or dashboard-session auth.

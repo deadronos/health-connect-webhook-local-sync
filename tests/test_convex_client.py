@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import call, patch
 from app.convex_client import ConvexClient
 
 
@@ -23,8 +23,8 @@ def test_store_raw_delivery_calls_mutation():
         assert call_args[0][1]["dataClassReason"] == "header:x-openclaw-test-data"
 
 
-def test_ingest_delivery_calls_atomic_mutation():
-    """ingest_delivery delegates to the new idempotent write mutation."""
+def test_ingest_delivery_uses_single_mutation_for_small_batches():
+    """Small payloads keep the single-mutation ingest path."""
     client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
 
     with patch.object(
@@ -69,3 +69,148 @@ def test_ingest_delivery_calls_atomic_mutation():
     mock_mut.assert_called_once()
     assert mock_mut.call_args[0][0] == "mutations.js:ingestNormalizedDelivery"
     assert mock_mut.call_args[0][1]["rawDelivery"]["dataClass"] == "test"
+
+
+def test_ingest_delivery_chunks_large_batches_behind_single_raw_delivery():
+    """Large payloads should buffer events into chunked Convex writes without duplicating rawDeliveries."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key", ingest_batch_size=2)
+
+    with patch.object(
+        client._client,
+        "mutation",
+        side_effect=[
+            "delivery-123",
+            {
+                "receivedRecords": 2,
+                "storedRecords": 2,
+                "duplicateRecords": 0,
+            },
+            {
+                "receivedRecords": 1,
+                "storedRecords": 0,
+                "duplicateRecords": 1,
+            },
+        ],
+    ) as mock_mut:
+        result = client.ingest_delivery(
+            raw_delivery={
+                "receivedAt": 1710803600000,
+                "sourceIp": "127.0.0.1",
+                "userAgent": "pytest",
+                "payloadJson": '{"records": []}',
+                "payloadHash": "hash123",
+                "status": "stored",
+                "recordCount": 3,
+            },
+            events=[
+                {
+                    "rawDeliveryId": "placeholder",
+                    "recordType": "steps",
+                    "valueNumeric": 1000.0,
+                    "unit": "count",
+                    "startTime": 1710800000000,
+                    "endTime": 1710803600000,
+                    "capturedAt": 1710803600000,
+                    "payloadHash": "hash123",
+                    "fingerprint": "fingerprint-123",
+                    "createdAt": 1710803600000,
+                },
+                {
+                    "rawDeliveryId": "placeholder",
+                    "recordType": "steps",
+                    "valueNumeric": 500.0,
+                    "unit": "count",
+                    "startTime": 1710803600000,
+                    "endTime": 1710807200000,
+                    "capturedAt": 1710807200000,
+                    "payloadHash": "hash123",
+                    "fingerprint": "fingerprint-456",
+                    "createdAt": 1710807200000,
+                },
+                {
+                    "rawDeliveryId": "placeholder",
+                    "recordType": "steps",
+                    "valueNumeric": 500.0,
+                    "unit": "count",
+                    "startTime": 1710807200000,
+                    "endTime": 1710810800000,
+                    "capturedAt": 1710810800000,
+                    "payloadHash": "hash123",
+                    "fingerprint": "fingerprint-456",
+                    "createdAt": 1710810800000,
+                },
+            ],
+        )
+
+    assert result == {
+        "delivery_id": "delivery-123",
+        "received_records": 3,
+        "stored_records": 2,
+        "duplicate_records": 1,
+    }
+    assert mock_mut.call_args_list == [
+        call(
+            "mutations.js:storeRawDelivery",
+            {
+                "receivedAt": 1710803600000,
+                "sourceIp": "127.0.0.1",
+                "userAgent": "pytest",
+                "payloadJson": '{"records": []}',
+                "payloadHash": "hash123",
+                "status": "stored",
+                "recordCount": 3,
+            },
+        ),
+        call(
+            "mutations.js:ingestNormalizedEventsChunk",
+            {
+                "rawDeliveryId": "delivery-123",
+                "events": [
+                    {
+                        "rawDeliveryId": "placeholder",
+                        "recordType": "steps",
+                        "valueNumeric": 1000.0,
+                        "unit": "count",
+                        "startTime": 1710800000000,
+                        "endTime": 1710803600000,
+                        "capturedAt": 1710803600000,
+                        "payloadHash": "hash123",
+                        "fingerprint": "fingerprint-123",
+                        "createdAt": 1710803600000,
+                    },
+                    {
+                        "rawDeliveryId": "placeholder",
+                        "recordType": "steps",
+                        "valueNumeric": 500.0,
+                        "unit": "count",
+                        "startTime": 1710803600000,
+                        "endTime": 1710807200000,
+                        "capturedAt": 1710807200000,
+                        "payloadHash": "hash123",
+                        "fingerprint": "fingerprint-456",
+                        "createdAt": 1710807200000,
+                    },
+                ],
+            },
+        ),
+        call(
+            "mutations.js:ingestNormalizedEventsChunk",
+            {
+                "rawDeliveryId": "delivery-123",
+                "events": [
+                    {
+                        "rawDeliveryId": "placeholder",
+                        "recordType": "steps",
+                        "valueNumeric": 500.0,
+                        "unit": "count",
+                        "startTime": 1710807200000,
+                        "endTime": 1710810800000,
+                        "capturedAt": 1710810800000,
+                        "payloadHash": "hash123",
+                        "fingerprint": "fingerprint-456",
+                        "createdAt": 1710810800000,
+                    },
+                ],
+            },
+        ),
+    ]
