@@ -1,6 +1,6 @@
 # Health Connect Webhook Ingest
 
-A local Python server that receives webhook payloads from an Android Health Connect sender, validates and normalizes the data, stores it durably in Convex, and exposes developer-friendly endpoints for inspection.
+A local-first FastAPI service that accepts Health Connect webhook payloads, normalizes them into a canonical event contract, stores raw and deduped data in Convex, and now exposes authenticated analytics APIs plus a built-in dashboard.
 
 ---
 
@@ -10,69 +10,84 @@ A local Python server that receives webhook payloads from an Android Health Conn
 flowchart LR
     subgraph External
         sender["Android sender\nor mock_sender"]
-        developer["Developer\nBrowser"]
-        lb["Load balancer\nor cron"]
+        browser["Developer browser\nwith bearer header"]
+        probe["Load balancer\nor uptime probe"]
     end
 
     subgraph FastAPI["FastAPI (health-ingest)\n127.0.0.1:8787"]
-        auth["auth.py\nBearerAuth"]
-        normalizer["normalizer.py\nsteps / heart_rate / resting_hr / weight"]
-        client["convex_client.py\nHTTP → Convex API"]
+        auth["Bearer auth"]
+        normalizers["Strict flat + Android\nnormalizers"]
+        analytics_api["/analytics/**"]
+        dashboard["/dashboard\nJinja + vanilla JS"]
+        client["Convex HTTP client"]
     end
 
-    subgraph Convex["Convex self-hosted\n127.0.0.1:3211/api site"]
-        raw["raw_deliveries"]
-        events["health_events"]
-        fwd["forward_attempts"]
+    subgraph Convex["Convex self-hosted\n127.0.0.1:3210"]
+        raw["rawDeliveries"]
+        events["healthEvents"]
+        buckets["healthEventBuckets\nhour/day rollups"]
+        fwd["forwardAttempts"]
     end
 
-    sender -->|"POST /ingest/health/v1\nBearer auth"| auth
-    auth --> normalizer
-    normalizer --> client
-    client -->|"storeRawDelivery"| raw
-    client -->|"storeHealthEvents"| events
-    developer -->|"GET /debug/recent\nBearer auth"| auth
-    lb -->|"GET /healthz\n(no auth)"| auth
+    sender -->|"POST /ingest/health/v1\nBearer token"| auth
+    auth --> normalizers
+    normalizers --> client
+    client -->|"ingestNormalizedDelivery"| raw
+    client --> events
+    client --> buckets
+
+    browser -->|"GET /dashboard\nBearer token"| dashboard
+    dashboard --> analytics_api
+    analytics_api --> auth
+    analytics_api --> client
+
+    probe -->|"GET /healthz\nno auth"| FastAPI
 
     raw --- Convex
     events --- Convex
+    buckets --- Convex
     fwd --- Convex
 ```
 
-**Data flow for a typical ingest:**
+### What happens on ingest
 
-1. Android sender or mock sender sends `POST /ingest/health/v1` with a bearer token and JSON payload
-2. `BearerAuth` middleware verifies the token — rejects with 401 if missing or wrong
-3. Payload is parsed and validated against `IngestRequest` schema
-4. Raw payload is stored to `raw_deliveries` in Convex with metadata (IP, user agent, hash, timestamp)
-5. `Normalizer` transforms each record into a canonical `health_events` row
-6. Canonical rows are stored to `health_events` in Convex
-7. Response returned: `{"ok": true, "received_records": N, "stored_records": N, "delivery_id": "..."}`
+1. `POST /ingest/health/v1` authenticates with a bearer token.
+2. The payload is validated and auto-detected as either flat `records` format or nested Android format.
+3. The normalizer emits canonical events with `deviceId`, `fingerprint`, and optional `metadata`.
+4. A single Convex mutation stores the raw delivery, inserts only new events by fingerprint, and updates `hour`/`day` rollup buckets.
+5. The response shape stays stable:
+
+```json
+{
+  "ok": true,
+  "received_records": 2,
+  "stored_records": 1,
+  "delivery_id": "delivery-123"
+}
+```
 
 ---
 
 ## Features
 
-- **Ingest endpoint** (`POST /ingest/health/v1`) — accepts Health Connect webhook payloads in flat or Android nested format, validates bearer auth, stores raw + normalized data
-- **Health check** (`GET /healthz`) — unauthenticated probe for load balancers and health checks
-- **Debug endpoint** (`GET /debug/recent`) — inspect recent deliveries (auth required, gated by `ENABLE_DEBUG_ROUTES`)
-- **Strict normalizer** — handles all 17 Android data types: steps, sleep, heart_rate, heart_rate_variability, distance, active_calories, total_calories, weight, height, oxygen_saturation, resting_heart_rate, exercise, nutrition, basal_metabolic_rate, body_fat, lean_body_mass, vo2_max; raises on unknown types
-- **Dual format support** — accepts both flat `records` format and Android nested format (auto-detected by payload structure)
-- **Dedupe at event level** — raw deliveries are all kept; normalized events are fingerprinted to prevent duplicates
-- **Mock sender** — CLI tool to send fixture payloads locally without a real phone/watch
-- **Convex self-hosted** — SQLite-backed, zero ops overhead for local development
-- **Bearer token auth** — single static token, no sender-side code changes needed
+- **Idempotent ingest** — one Convex mutation stores the raw delivery, dedupes events by fingerprint, and updates analytics buckets.
+- **Canonical event contract** — normalized events preserve `deviceId`, `externalId`, `fingerprint`, and optional `metadata`.
+- **Dual payload support** — accepts both legacy flat `records` payloads and nested Android Health Connect payloads.
+- **Analytics JSON APIs** — authenticated `/analytics/overview`, `/analytics/timeseries`, `/analytics/events`, and `/analytics/export.csv`.
+- **Built-in dashboard** — authenticated `/dashboard` page served by FastAPI with Jinja2 templates and vanilla JavaScript.
+- **Debug and health routes** — `/debug/recent` for recent deliveries and `/healthz` for unauthenticated health checks.
+- **Convex self-hosted** — local SQLite-backed persistence without introducing a second database yet.
 
 ---
 
-## Quick Start
+## Quick start
 
 ### Prerequisites
 
 - Python 3.12+
 - Convex self-hosted backend running at `http://127.0.0.1:3210`
 
-If Convex is not running:
+If Convex is not already running:
 
 ```bash
 cd convex-local
@@ -82,233 +97,250 @@ docker compose up
 ### Setup
 
 ```bash
-# Create virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
-
-# Install dependencies
 pip install -e .
-
-# Copy env config
-cp .env.example .env
-# Edit .env and set:
-#   INGEST_TOKEN=<your-token>
-#   CONVEX_SELF_HOSTED_ADMIN_KEY=<from convex-local/.env>
 ```
 
-### Run
+Create a local `.env` file in the repo root:
+
+```dotenv
+APP_ENV=development
+APP_HOST=127.0.0.1
+APP_PORT=8787
+INGEST_TOKEN=replace_me
+CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210
+CONVEX_SELF_HOSTED_ADMIN_KEY=replace_me
+ENABLE_DEBUG_ROUTES=true
+ENABLE_ANALYTICS_ROUTES=true
+MAX_BODY_BYTES=262144
+OPENCLAW_WEBHOOK_URL=
+OPENCLAW_WEBHOOK_TOKEN=
+```
+
+### Run the server
 
 ```bash
-# Start the server
 ./scripts/dev.sh
+```
 
-# In another terminal, send a test payload
+### Send a fixture payload
+
+```bash
 python tools/mock_sender.py \
-  --fixture fixtures/healthconnect_steps.json \
+  --fixture fixtures/healthconnect_android_mixed.json \
   --token your-token
 ```
 
-### Test
+### Run the test suite
 
 ```bash
 ./scripts/test.sh
-# → 25 tests, all passing
+```
+
+### Open the dashboard
+
+The initial `GET /dashboard` request must include the same bearer token used by the API routes. After that authenticated page load, the dashboard reuses the verified token for its `/analytics/**` requests.
+
+If you are using a browser, use a header extension or another tool that can send:
+
+```text
+Authorization: Bearer <INGEST_TOKEN>
 ```
 
 ---
 
-## API Reference
+## API overview
 
 ### `POST /ingest/health/v1`
 
-**Auth:** `Authorization: Bearer <INGEST_TOKEN>`
-
-**Request body:**
-```json
-{
-  "records": [
-    {
-      "record_type": "steps",
-      "value": 8421,
-      "unit": "count",
-      "start_time_ms": 1713446400000,
-      "end_time_ms": 1713489296000,
-      "captured_at_ms": 1713489302000
-    }
-  ]
-}
-```
-
-**Success response (200):**
-```json
-{
-  "ok": true,
-  "received_records": 1,
-  "stored_records": 1,
-  "delivery_id": "a1b2c3d4"
-}
-```
-
-**Error responses:** `401` (auth failed), `413` (payload too large), `422` (malformed or unsupported record type), `500` (database error)
-
----
+- **Auth:** required
+- **Purpose:** validate a webhook payload, normalize records, store the raw delivery, dedupe events, and update rollups
+- **Response:** `ok`, `received_records`, `stored_records`, `delivery_id`
 
 ### `GET /healthz`
 
-No auth.
-
-```json
-{"ok": true, "db": "ok"}
-```
-
----
+- **Auth:** none
+- **Purpose:** liveness/readiness check for the FastAPI app plus basic Convex connectivity
 
 ### `GET /debug/recent?limit=10`
 
-**Auth:** `Authorization: Bearer <INGEST_TOKEN>`
+- **Auth:** required
+- **Gate:** `ENABLE_DEBUG_ROUTES=true`
+- **Purpose:** recent raw-delivery inspection for local debugging
 
-Requires `ENABLE_DEBUG_ROUTES=true` in environment.
+### `GET /analytics/overview`
 
-```json
-{
-  "deliveries": [
-    {
-      "delivery_id": "a1b2c3d4",
-      "received_at": "2026-04-18T12:34:56Z",
-      "record_count": 4,
-      "status": "stored"
-    }
-  ]
-}
-```
+- **Auth:** required
+- **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
+- **Optional query params:** `from_ms`, `to_ms`, repeated `record_type`, `device_id`
+- **Purpose:** per-record-type summary cards with count, min, max, avg, sum, and latest values
+
+### `GET /analytics/timeseries`
+
+- **Auth:** required
+- **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
+- **Required query params:** `record_type`
+- **Optional query params:** `bucket=hour|day`, `stat=count|sum|avg|min|max|latest_value`, `from_ms`, `to_ms`, `device_id`
+- **Purpose:** time-series points for charts and trend views
+
+### `GET /analytics/events`
+
+- **Auth:** required
+- **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
+- **Optional query params:** `from_ms`, `to_ms`, repeated `record_type`, `device_id`, `limit`
+- **Purpose:** recent normalized events for inspection tables or downstream tooling
+
+### `GET /analytics/export.csv`
+
+- **Auth:** required
+- **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
+- **Optional query params:** same filters as `/analytics/events`
+- **Purpose:** quick CSV export of filtered normalized events
+
+### `GET /dashboard`
+
+- **Auth:** required
+- **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
+- **Purpose:** built-in HTML dashboard for overview cards, a simple chart, recent events, and CSV export
 
 ---
 
-## Supported Record Types
+## Supported payloads and canonical data
 
-| Type | Value | Unit |
-|------|-------|------|
-| `steps` | integer | `count` |
-| `heart_rate` | integer | `bpm` |
-| `resting_heart_rate` | integer | `bpm` |
-| `weight` | float | `kg` |
+### Flat `records` payload
 
-Other types (e.g., `blood_oxygen`, `sleep`, `distance`) are not supported and will cause a `422` response.
+The legacy flat format remains supported for these record types:
+
+- `steps`
+- `heart_rate`
+- `resting_heart_rate`
+- `weight`
+
+### Android nested payload
+
+The Android normalizer currently accepts:
+
+- `steps`
+- `sleep`
+- `heart_rate`
+- `heart_rate_variability`
+- `distance`
+- `active_calories`
+- `total_calories`
+- `weight`
+- `height`
+- `oxygen_saturation`
+- `resting_heart_rate`
+- `exercise`
+- `nutrition`
+- `basal_metabolic_rate`
+- `body_fat`
+- `lean_body_mass`
+- `vo2_max`
+
+### Canonical event fields
+
+Normalized events carry:
+
+- `recordType`
+- `valueNumeric`
+- `unit`
+- `startTime`
+- `endTime`
+- `capturedAt`
+- optional `deviceId`
+- optional `externalId`
+- `payloadHash`
+- `fingerprint`
+- optional `metadata`
+
+The current `exercise` mapping stores `duration_seconds` as the value and preserves `type` as `metadata.exerciseType`.
 
 ---
 
-## Environment Variables
+## Environment variables
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| -------- | ------- | ----------- |
 | `APP_ENV` | `development` | Runtime environment |
 | `APP_HOST` | `127.0.0.1` | Listen address |
 | `APP_PORT` | `8787` | Listen port |
-| `INGEST_TOKEN` | `replace_me` | Bearer token for auth |
+| `INGEST_TOKEN` | `replace_me` | Bearer token for `/ingest/**`, `/debug/**`, `/analytics/**`, and `/dashboard` |
 | `CONVEX_SELF_HOSTED_URL` | `http://127.0.0.1:3210` | Convex backend URL |
 | `CONVEX_SELF_HOSTED_ADMIN_KEY` | — | Convex admin key |
-| `ENABLE_DEBUG_ROUTES` | `true` | Enable/disable `/debug/*` routes |
-| `MAX_BODY_BYTES` | `262144` | Max request body size (256 KB) |
-| `OPENCLAW_WEBHOOK_URL` | — | Optional OpenClaw forwarding target |
-| `OPENCLAW_WEBHOOK_TOKEN` | — | OpenClaw forwarding token |
+| `ENABLE_DEBUG_ROUTES` | `true` | Enable or disable `/debug/**` |
+| `ENABLE_ANALYTICS_ROUTES` | `true` | Enable or disable `/analytics/**` and `/dashboard` |
+| `MAX_BODY_BYTES` | `262144` | Maximum request body size in bytes |
+| `OPENCLAW_WEBHOOK_URL` | — | Optional downstream forwarding target |
+| `OPENCLAW_WEBHOOK_TOKEN` | — | Optional downstream forwarding token |
 
 ---
 
-## Project Structure
+## Project structure
 
-```
+```text
 app/
-  main.py              # FastAPI app factory
-  config.py            # Settings via pydantic-settings
-  auth.py              # BearerAuth middleware
-  convex_client.py     # Convex HTTP client
-  normalizer.py        # Webhook → canonical events
-  models.py            # Canonical event model
-  schemas.py           # Request/response Pydantic schemas
+  main.py
+  auth.py
+  config.py
+  convex_client.py
+  models.py
+  normalizer.py
+  schemas.py
   routes/
-    ingest.py         # POST /ingest/health/v1
-    health.py         # GET /healthz
-    debug.py          # GET /debug/recent
+    ingest.py
+    health.py
+    debug.py
+    analytics.py
+    dashboard.py
+  templates/
+    dashboard.html
+  static/
+    dashboard.css
+    dashboard.js
 
-convex/                # Convex backend (sibling TypeScript project)
-  schema.ts           # Table definitions
+convex/
+  schema.ts
   healthIngester/
-    mutations.ts      # storeRawDelivery, storeHealthEvents, checkDuplicateDelivery
-    queries.ts       # listRecentDeliveries, checkDbHealth, etc.
+    mutations.ts
+    queries.ts
 
-fixtures/              # JSON test payloads
-  healthconnect_steps.json
-  healthconnect_heartrate.json
-  healthconnect_weight.json
-  healthconnect_mixed.json
-  healthconnect_invalid_missing_fields.json
-  healthconnect_duplicate_event.json
-
+fixtures/
 tools/
-  mock_sender.py       # CLI tool to send fixture payloads
-
 scripts/
-  dev.sh              # Activate venv + run uvicorn
-  test.sh             # Activate venv + run pytest
-
 tests/
-  conftest.py         # Shared pytest fixtures
-  test_auth.py        # Auth middleware tests
-  test_config.py      # Settings loading tests
-  test_convex_client.py
-  test_normalize.py   # Normalizer tests
-  test_ingest.py      # End-to-end ingest tests
-  test_validation.py # Payload validation tests
-  test_models.py
-  test_schemas.py
-  test_main.py
-
 docs/
-  architecture/       # ADRs (source of truth)
+  architecture/
     001-convex-as-database.md
     002-strict-normalizer.md
     003-bearer-token-auth.md
-  superpowers/        # Planning artifacts
-    specs/
-      2026-04-18-health-ingest-mvp-design.md
-    plans/
-      2026-04-18-health-ingest-mvp-plan.md
-
-AGENTS.md              # Agent guidance (docs/code sync rules)
-CHANGELOG.md           # One-line per change, YYYY-MM-DD
-pyproject.toml
-.env.example
+    004-analytics-read-model.md
 ```
 
 ---
 
-## Development
+## Development notes
 
-### Adding a new record type
+### Adding or changing record types
 
-1. Add the type to `normalizer.py`'s `SUPPORTED_TYPES` and `UNIT_MAP`
-2. Add a test in `test_normalize.py`
-3. Update `002-strict-normalizer.md` if the architectural stance changes
-4. Append to `CHANGELOG.md`
+1. Update `app/normalizer.py`.
+2. Update `app/models.py` if the canonical contract changes.
+3. Update or add pytest coverage in `tests/`.
+4. Keep the ADRs, `README.md`, and `CHANGELOG.md` in sync.
 
-### Capturing real payloads
+### Local analytics scope
 
-When the Android sender is connected, capture real payloads and save them as new fixtures in `fixtures/`. Update the normalizer based on what actually arrives.
+The current analytics read model is intentionally modest:
 
-### Running against a live Convex backend
+- hour/day rollup buckets live in Convex
+- overview and event listing can still scan event rows when that is simpler or more accurate
+- Postgres is intentionally deferred until real contention or query complexity makes it worth the extra operational weight
+
+### Useful local commands
 
 ```bash
 cd convex-local && docker compose up
-# Backend available at http://127.0.0.1:3210
-```
-
-### Running the mock sender against a live server
-
-```bash
-source .venv/bin/activate
-python tools/mock_sender.py \
-  --fixture fixtures/healthconnect_mixed.json \
-  --token $(grep INGEST_TOKEN .env | cut -d= -f2) \
-  --jitter-hours 1 \
-  --repeat 3
+./scripts/dev.sh
+./scripts/test.sh
 ```

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="dashboard-token" content="{{ bearer_token }}">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ request.url_for('static', path='dashboard.css') }}">
+</head>
+<body>
+    <header class="hero">
+        <div>
+            <p class="eyebrow">Phase 2 analytics</p>
+            <h1>Health Analytics Dashboard</h1>
+            <p class="subtitle">A lightweight built-in view over the Convex-backed health event stream.</p>
+        </div>
+        <div class="status-chip">Authenticated session</div>
+    </header>
+
+    <main class="dashboard-shell">
+        <section class="panel controls-panel">
+            <form id="filters-form" class="controls-grid">
+                <label>
+                    <span>From</span>
+                    <input id="from-date" name="from_date" type="date">
+                </label>
+                <label>
+                    <span>To</span>
+                    <input id="to-date" name="to_date" type="date">
+                </label>
+                <label>
+                    <span>Record type</span>
+                    <select id="record-type" name="record_type">
+                        <option value="">Auto-select from data</option>
+                    </select>
+                </label>
+                <div class="controls-actions">
+                    <button id="refresh-button" type="submit">Refresh</button>
+                    <a id="export-link" class="secondary-action" href="/analytics/export.csv">Download CSV</a>
+                </div>
+            </form>
+        </section>
+
+        <section class="panel">
+            <div class="section-heading">
+                <h2>Overview</h2>
+                <p>High-level stats across the selected time window.</p>
+            </div>
+            <div id="overview-cards" class="card-grid">
+                <div class="empty-state">Loading overview…</div>
+            </div>
+        </section>
+
+        <section class="panel chart-panel">
+            <div class="section-heading">
+                <h2>Time series</h2>
+                <p id="timeseries-summary">Waiting for data…</p>
+            </div>
+            <svg id="timeseries-chart" viewBox="0 0 800 240" preserveAspectRatio="none" aria-label="Time series chart"></svg>
+        </section>
+
+        <section class="panel events-panel">
+            <div class="section-heading">
+                <h2>Recent events</h2>
+                <p>Latest normalized records matching the current filters.</p>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Value</th>
+                            <th>Device</th>
+                            <th>Captured</th>
+                            <th>Metadata</th>
+                        </tr>
+                    </thead>
+                    <tbody id="events-body">
+                        <tr>
+                            <td class="empty-state" colspan="5">Loading recent events…</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="{{ request.url_for('static', path='dashboard.js') }}" defer></script>
+</body>
+</html>

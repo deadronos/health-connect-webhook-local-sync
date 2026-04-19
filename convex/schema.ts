@@ -39,13 +39,29 @@ export default defineSchema({
     startTime: v.number(),
     endTime: v.number(),
     capturedAt: v.number(),
+    deviceId: v.optional(v.string()),
     externalId: v.optional(v.string()),
     payloadHash: v.string(),
+    fingerprint: v.string(),
+    metadata: v.optional(v.any()),
     createdAt: v.number(),
   })
     .index("by_delivery", ["rawDeliveryId"])
     .index("by_payload_hash", ["payloadHash"])
-    .index("by_fingerprint", ["recordType", "startTime", "valueNumeric", "unit"]),
+    .index("by_fingerprint", ["fingerprint"]),
+
+  healthEventBuckets: defineTable({
+    bucketSize: v.union(v.literal("hour"), v.literal("day")),
+    bucketStart: v.number(),
+    recordType: v.string(),
+    deviceId: v.optional(v.string()),
+    count: v.number(),
+    sum: v.number(),
+    min: v.number(),
+    max: v.number(),
+    latestValue: v.number(),
+    latestAt: v.number(),
+  }).index("by_bucket", ["bucketSize", "recordType", "bucketStart"]),
 
   forwardAttempts: defineTable({
     rawDeliveryId: v.string(),

@@ -27,8 +27,12 @@ def valid_android_steps():
 def mock_convex_client():
     """Mock ConvexClient methods used by the ingest route."""
     with patch("app.routes.ingest.client") as mock_client:
-        mock_client.store_raw_delivery.return_value = "test-delivery-id"
-        mock_client.store_health_events.return_value = ["test-event-id"]
+        mock_client.ingest_delivery.return_value = {
+            "delivery_id": "test-delivery-id",
+            "received_records": 1,
+            "stored_records": 1,
+            "duplicate_records": 0,
+        }
         yield mock_client
 
 
@@ -131,3 +135,37 @@ async def test_android_format_invalid_payload_rejected():
             headers={"Authorization": "Bearer test-token"},
         )
         assert resp.status_code == 422
+
+@pytest.mark.asyncio
+async def test_android_exercise_ingest_passes_metadata_to_storage(mock_convex_client):
+    """Exercise events should preserve metadata in the normalized payload sent to storage."""
+    from httpx import ASGITransport, AsyncClient
+    from app.main import create_app
+
+    app = create_app()
+    payload = {
+        "timestamp": "2024-03-19T10:00:00Z",
+        "app_version": "1.0.0",
+        "exercise": [
+            {
+                "type": "running",
+                "start_time": "2024-03-19T10:00:00Z",
+                "end_time": "2024-03-19T10:30:00Z",
+                "duration_seconds": 1800,
+            }
+        ],
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/ingest/health/v1",
+            json=payload,
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert resp.status_code == 200
+    stored_events = mock_convex_client.ingest_delivery.call_args.kwargs["events"]
+    assert stored_events[0]["recordType"] == "exercise"
+    assert stored_events[0]["metadata"] == {"exerciseType": "running"}
+    assert isinstance(stored_events[0]["fingerprint"], str)
+    assert stored_events[0]["fingerprint"]

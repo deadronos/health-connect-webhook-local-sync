@@ -11,6 +11,24 @@ def test_normalize_steps():
     assert events[0]["valueNumeric"] == 8421.0
     assert events[0]["unit"] == "count"
 
+def test_android_exercise_record_emits_metadata_and_fingerprint():
+    payload = {
+        "exercise": [
+            {
+                "type": "running",
+                "start_time": "2024-03-19T10:00:00Z",
+                "end_time": "2024-03-19T10:30:00Z",
+                "duration_seconds": 1800,
+            }
+        ]
+    }
+    normalizer = AndroidPayloadNormalizer(payload, "hash123", "delivery456")
+    event = normalizer.normalize()[0]
+
+    assert event["recordType"] == "exercise"
+    assert event["metadata"] == {"exerciseType": "running"}
+    assert isinstance(event["fingerprint"], str)
+    assert event["fingerprint"]
 
 def test_normalize_heart_rate():
     payload = {

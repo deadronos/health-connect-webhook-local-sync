@@ -36,6 +36,59 @@ class DebugResponse(BaseModel):
     deliveries: list[DebugDelivery]
 
 
+class AnalyticsOverviewCard(BaseModel):
+    record_type: str
+    count: int
+    min: Optional[float] = None
+    max: Optional[float] = None
+    avg: Optional[float] = None
+    sum: Optional[float] = None
+    latest_value: Optional[float] = None
+    latest_at: Optional[int] = None
+
+
+class AnalyticsOverviewResponse(BaseModel):
+    cards: list[AnalyticsOverviewCard]
+
+
+class AnalyticsTimeseriesPoint(BaseModel):
+    bucket_start: int
+    value: float
+    count: int
+    sum: Optional[float] = None
+    avg: Optional[float] = None
+    min: Optional[float] = None
+    max: Optional[float] = None
+    latest_value: Optional[float] = None
+    latest_at: Optional[int] = None
+
+
+class AnalyticsTimeseriesResponse(BaseModel):
+    record_type: str
+    bucket: str
+    stat: str
+    points: list[AnalyticsTimeseriesPoint]
+
+
+class AnalyticsEvent(BaseModel):
+    raw_delivery_id: str
+    record_type: str
+    value: float
+    unit: str
+    start_time: int
+    end_time: int
+    captured_at: int
+    device_id: Optional[str] = None
+    external_id: Optional[str] = None
+    payload_hash: str
+    fingerprint: str
+    metadata: Optional[dict[str, Any]] = None
+
+
+class AnalyticsEventsResponse(BaseModel):
+    events: list[AnalyticsEvent]
+
+
 class StepRecord(BaseModel):
     count: int
     start_time: str
