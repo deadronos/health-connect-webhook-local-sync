@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ request.url_for('static', path='dashboard.css') }}">
+</head>
+<body>
+    <header class="hero">
+        <div>
+            <p class="eyebrow">Dashboard access</p>
+            <h1>Sign in with your ingest token</h1>
+            <p class="subtitle">Use the same `INGEST_TOKEN` that protects the webhook and API routes. Once verified, the browser keeps a signed session cookie for `/dashboard` and `/analytics/**`.</p>
+        </div>
+        <div class="status-chip">Browser login</div>
+    </header>
+
+    <main class="login-shell">
+        <section class="panel login-panel">
+            <div class="section-heading">
+                <h2>Open dashboard</h2>
+                <p>No extensions required anymore. Tiny win, big convenience.</p>
+            </div>
+
+            {% if error %}
+            <div class="error-banner">{{ error }}</div>
+            {% endif %}
+
+            <form method="post" action="/login" class="controls-grid login-form">
+                <input type="hidden" name="next" value="{{ next_path }}">
+                <label>
+                    <span>Bearer token</span>
+                    <input name="token" type="password" autocomplete="current-password" required>
+                </label>
+                <div class="controls-actions">
+                    <button type="submit">Sign in</button>
+                    <a class="secondary-action" href="/healthz">Check health</a>
+                </div>
+            </form>
+
+            <p class="helper-text">
+                Ingest and debug routes still require an <code>Authorization: Bearer &lt;INGEST_TOKEN&gt;</code>
+                header. The browser session only applies to the dashboard UI and analytics reads.
+            </p>
+        </section>
+    </main>
+</body>
+</html>

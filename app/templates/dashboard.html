@@ -3,7 +3,6 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="dashboard-token" content="{{ bearer_token }}">
     <title>{{ title }}</title>
     <link rel="stylesheet" href="{{ request.url_for('static', path='dashboard.css') }}">
 </head>
@@ -14,7 +13,12 @@
             <h1>Health Analytics Dashboard</h1>
             <p class="subtitle">A lightweight built-in view over the Convex-backed health event stream.</p>
         </div>
-        <div class="status-chip">Authenticated session</div>
+        <div class="hero-actions">
+            <div class="status-chip">Authenticated session</div>
+            <form method="post" action="/logout" class="logout-form">
+                <button type="submit" class="secondary-action logout-button">Log out</button>
+            </form>
+        </div>
     </header>
 
     <main class="dashboard-shell">

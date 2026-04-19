@@ -10,14 +10,15 @@ A local-first FastAPI service that accepts Health Connect webhook payloads, norm
 flowchart LR
     subgraph External
         sender["Android sender\nor mock_sender"]
-        browser["Developer browser\nwith bearer header"]
+    browser["Developer browser\n/login form + session cookie"]
         probe["Load balancer\nor uptime probe"]
     end
 
     subgraph FastAPI["FastAPI (health-ingest)\n0.0.0.0:8787 bind"]
-        auth["Bearer auth"]
+    auth["Bearer + browser\nsession auth"]
         normalizers["Strict flat + Android\nnormalizers"]
         analytics_api["/analytics/**"]
+    login["/login\nform + logout"]
         dashboard["/dashboard\nJinja + vanilla JS"]
         client["Convex HTTP client"]
     end
@@ -36,9 +37,10 @@ flowchart LR
     client --> events
     client --> buckets
 
-    browser -->|"GET /dashboard\nBearer token"| dashboard
+    browser -->|"GET /login\nPOST INGEST_TOKEN"| login
+    login -->|"signed session cookie"| dashboard
     dashboard --> analytics_api
-    analytics_api --> auth
+    analytics_api -->|"session cookie or bearer"| auth
     analytics_api --> client
 
     probe -->|"GET /healthz\nno auth"| FastAPI
@@ -73,8 +75,8 @@ flowchart LR
 - **Idempotent ingest** — one Convex mutation stores the raw delivery, dedupes events by fingerprint, and updates analytics buckets.
 - **Canonical event contract** — normalized events preserve `deviceId`, `externalId`, `fingerprint`, and optional `metadata`.
 - **Dual payload support** — accepts both legacy flat `records` payloads and nested Android Health Connect payloads.
-- **Analytics JSON APIs** — authenticated `/analytics/overview`, `/analytics/timeseries`, `/analytics/events`, and `/analytics/export.csv`.
-- **Built-in dashboard** — authenticated `/dashboard` page served by FastAPI with Jinja2 templates and vanilla JavaScript.
+- **Analytics JSON APIs** — authenticated `/analytics/overview`, `/analytics/timeseries`, `/analytics/events`, and `/analytics/export.csv` with bearer or dashboard-session auth.
+- **Built-in dashboard** — browser-friendly `/login` flow plus authenticated `/dashboard` page served by FastAPI with Jinja2 templates and vanilla JavaScript.
 - **Debug and health routes** — `/debug/recent` for recent deliveries and `/healthz` for unauthenticated health checks.
 - **Convex self-hosted** — local SQLite-backed persistence without introducing a second database yet.
 
@@ -113,6 +115,9 @@ CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210
 CONVEX_SELF_HOSTED_ADMIN_KEY=replace_me
 ENABLE_DEBUG_ROUTES=true
 ENABLE_ANALYTICS_ROUTES=true
+SESSION_SECRET=replace-me-session-secret
+SESSION_COOKIE_NAME=hc_dashboard_session
+SESSION_MAX_AGE_SECONDS=86400
 MAX_BODY_BYTES=262144
 OPENCLAW_WEBHOOK_URL=
 OPENCLAW_WEBHOOK_TOKEN=
@@ -142,9 +147,16 @@ python tools/mock_sender.py \
 
 ### Open the dashboard
 
-The initial `GET /dashboard` request must include the same bearer token used by the API routes. After that authenticated page load, the dashboard reuses the verified token for its `/analytics/**` requests.
+Open `http://127.0.0.1:8787/login` (or the same host you used to start the server), enter the same `INGEST_TOKEN` used by the API routes, and submit the form.
 
-If you are using a browser, use a header extension or another tool that can send:
+After a successful login, the browser receives a signed `HttpOnly` session cookie that authorizes:
+
+- `GET /dashboard`
+- `GET /analytics/**`
+
+No custom browser extension is required anymore. 🎉
+
+For scripts, curl, or any direct API client, bearer auth still works:
 
 ```text
 Authorization: Bearer <INGEST_TOKEN>
@@ -173,16 +185,34 @@ For the full current route contract, including auth expectations, query paramete
 - **Gate:** `ENABLE_DEBUG_ROUTES=true`
 - **Purpose:** recent raw-delivery inspection for local debugging
 
+### `GET /login`
+
+- **Auth:** none
+- **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
+- **Purpose:** browser login form that exchanges `INGEST_TOKEN` for a signed dashboard session cookie
+
+### `POST /login`
+
+- **Auth:** none (token submitted in form body)
+- **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
+- **Purpose:** validate the submitted ingest token and create a browser session for dashboard + analytics routes
+
+### `POST /logout`
+
+- **Auth:** none
+- **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
+- **Purpose:** clear the current dashboard session cookie
+
 ### `GET /analytics/overview`
 
-- **Auth:** required
+- **Auth:** bearer or dashboard session
 - **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
 - **Optional query params:** `from_ms`, `to_ms`, repeated `record_type`, `device_id`
 - **Purpose:** per-record-type summary cards with count, min, max, avg, sum, and latest values
 
 ### `GET /analytics/timeseries`
 
-- **Auth:** required
+- **Auth:** bearer or dashboard session
 - **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
 - **Required query params:** `record_type`
 - **Optional query params:** `bucket=hour|day`, `stat=count|sum|avg|min|max|latest_value`, `from_ms`, `to_ms`, `device_id`
@@ -190,23 +220,23 @@ For the full current route contract, including auth expectations, query paramete
 
 ### `GET /analytics/events`
 
-- **Auth:** required
+- **Auth:** bearer or dashboard session
 - **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
 - **Optional query params:** `from_ms`, `to_ms`, repeated `record_type`, `device_id`, `limit`
 - **Purpose:** recent normalized events for inspection tables or downstream tooling
 
 ### `GET /analytics/export.csv`
 
-- **Auth:** required
+- **Auth:** bearer or dashboard session
 - **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
 - **Optional query params:** same filters as `/analytics/events`
 - **Purpose:** quick CSV export of filtered normalized events
 
 ### `GET /dashboard`
 
-- **Auth:** required
+- **Auth:** bearer or dashboard session
 - **Gate:** `ENABLE_ANALYTICS_ROUTES=true`
-- **Purpose:** built-in HTML dashboard for overview cards, a simple chart, recent events, and CSV export
+- **Purpose:** built-in HTML dashboard for overview cards, a simple chart, recent events, CSV export, and logout
 
 ---
 
@@ -270,11 +300,14 @@ The current `exercise` mapping stores `duration_seconds` as the value and preser
 | `APP_ENV` | `development` | Runtime environment |
 | `APP_HOST` | `0.0.0.0` | Listen address for the FastAPI dev server; binds all interfaces so sandboxed agents can reach `:8787` |
 | `APP_PORT` | `8787` | Listen port |
-| `INGEST_TOKEN` | `replace_me` | Bearer token for `/ingest/**`, `/debug/**`, `/analytics/**`, and `/dashboard` |
+| `INGEST_TOKEN` | `replace_me` | Bearer token for `/ingest/**` and `/debug/**`; also the shared credential used by direct API clients and the browser login form |
 | `CONVEX_SELF_HOSTED_URL` | `http://127.0.0.1:3210` | Convex backend URL |
 | `CONVEX_SELF_HOSTED_ADMIN_KEY` | — | Convex admin key |
 | `ENABLE_DEBUG_ROUTES` | `true` | Enable or disable `/debug/**` |
-| `ENABLE_ANALYTICS_ROUTES` | `true` | Enable or disable `/analytics/**` and `/dashboard` |
+| `ENABLE_ANALYTICS_ROUTES` | `true` | Enable or disable `/login`, `/logout`, `/analytics/**`, and `/dashboard` |
+| `SESSION_SECRET` | `replace-me-session-secret` | Secret used to sign browser session cookies for `/dashboard` and `/analytics/**`; replace it outside throwaway local development |
+| `SESSION_COOKIE_NAME` | `hc_dashboard_session` | Cookie name for the signed dashboard session |
+| `SESSION_MAX_AGE_SECONDS` | `86400` | Dashboard session lifetime in seconds |
 | `MAX_BODY_BYTES` | `262144` | Maximum request body size in bytes |
 | `OPENCLAW_WEBHOOK_URL` | — | Optional downstream forwarding target |
 | `OPENCLAW_WEBHOOK_TOKEN` | — | Optional downstream forwarding token |
@@ -296,10 +329,12 @@ app/
     ingest.py
     health.py
     debug.py
+    browser_auth.py
     analytics.py
     dashboard.py
   templates/
     dashboard.html
+    login.html
   static/
     dashboard.css
     dashboard.js

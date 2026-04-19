@@ -22,8 +22,7 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 @router.post("/health/v1", response_model=IngestResponse)
 async def ingest_health(request: Request):
     # Verify auth
-    auth_header = request.headers.get("authorization")
-    auth.verify(auth_header)
+    auth.require_bearer_request(request)
 
     # Read body
     body = await request.body()

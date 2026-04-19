@@ -1,4 +1,3 @@
-const token = document.querySelector('meta[name="dashboard-token"]')?.content ?? '';
 const form = document.getElementById('filters-form');
 const fromDateInput = document.getElementById('from-date');
 const toDateInput = document.getElementById('to-date');
@@ -19,16 +18,17 @@ const escapeHtml = (value) => String(value)
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#39;');
 
+function redirectToLogin() {
+  const next = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
+  window.location.assign(`/login?next=${next}`);
+}
+
 function initialiseDates() {
   const today = new Date();
   const start = new Date(today);
   start.setUTCDate(today.getUTCDate() - 6);
   fromDateInput.value = formatDate(start);
   toDateInput.value = formatDate(today);
-}
-
-function buildHeaders() {
-  return { Authorization: `Bearer ${token}` };
 }
 
 function buildParams({ includeRecordType = false, limit } = {}) {
@@ -50,7 +50,11 @@ function buildParams({ includeRecordType = false, limit } = {}) {
 
 async function fetchJson(path, params) {
   const url = params && params.toString() ? `${path}?${params.toString()}` : path;
-  const response = await fetch(url, { headers: buildHeaders() });
+  const response = await fetch(url, { credentials: 'same-origin' });
+  if (response.status === 401) {
+    redirectToLogin();
+    throw new Error('Your dashboard session expired. Redirecting to login…');
+  }
   if (!response.ok) {
     throw new Error(`Request failed (${response.status})`);
   }
@@ -91,7 +95,11 @@ async function downloadExport(event) {
   event.preventDefault();
 
   try {
-    const response = await fetch(exportLink.href, { headers: buildHeaders() });
+    const response = await fetch(exportLink.href, { credentials: 'same-origin' });
+    if (response.status === 401) {
+      redirectToLogin();
+      throw new Error('Your dashboard session expired. Redirecting to login…');
+    }
     if (!response.ok) {
       throw new Error(`Export failed (${response.status})`);
     }
@@ -167,13 +175,6 @@ function updateExportLink() {
 }
 
 async function refreshDashboard() {
-  if (!token) {
-    overviewCards.innerHTML = '<div class="empty-state">Missing bearer token for dashboard session.</div>';
-    chart.innerHTML = '';
-    eventsBody.innerHTML = '<tr><td class="empty-state" colspan="5">Missing bearer token.</td></tr>';
-    return;
-  }
-
   try {
     overviewCards.innerHTML = '<div class="empty-state">Refreshing overview…</div>';
     eventsBody.innerHTML = '<tr><td class="empty-state" colspan="5">Refreshing events…</td></tr>';

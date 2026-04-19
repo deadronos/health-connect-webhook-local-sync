@@ -9,6 +9,9 @@ This document covers every route currently registered in `app/main.py`:
 - `GET /healthz`
 - `POST /ingest/health/v1`
 - `GET /debug/recent`
+- `GET /login`
+- `POST /login`
+- `POST /logout`
 - `GET /analytics/overview`
 - `GET /analytics/timeseries`
 - `GET /analytics/events`
@@ -18,16 +21,25 @@ This document covers every route currently registered in `app/main.py`:
 
 ## Global conventions
 
-Protected-route auth header:
+Bearer auth header for direct API access:
 
 ```text
 Authorization: Bearer <INGEST_TOKEN>
 ```
 
-Protected routes:
+Browser session auth:
+
+- `GET /login` renders a form that accepts the same shared `INGEST_TOKEN`
+- `POST /login` validates the token and sets a signed `HttpOnly` session cookie
+- the signed session cookie is accepted by `/dashboard` and `/analytics/**`
+
+Bearer-only protected routes:
 
 - `/ingest/health/v1`
 - `/debug/recent`
+
+Session-or-bearer protected routes:
+
 - `/analytics/**`
 - `/dashboard`
 
@@ -38,7 +50,7 @@ Unauthenticated route:
 Feature gates:
 
 - `ENABLE_DEBUG_ROUTES=true` enables `/debug/recent`
-- `ENABLE_ANALYTICS_ROUTES=true` enables `/analytics/**` and `/dashboard`
+- `ENABLE_ANALYTICS_ROUTES=true` enables `/login`, `/logout`, `/analytics/**`, and `/dashboard`
 
 When disabled, gated routes return `404`.
 
@@ -70,7 +82,8 @@ Analytics `record_type` values:
 
 Common error patterns:
 
-- `401` for missing or invalid bearer auth on protected routes
+- `303` redirect from `/dashboard` to `/login?next=/dashboard` when the browser is unauthenticated
+- `401` for missing or invalid bearer/session auth on protected routes
 - `404` when a gated route is disabled by config
 - `413` when ingest payload size exceeds `MAX_BODY_BYTES`
 - `422` for invalid request structure, malformed JSON, invalid query params, or invalid time-window validation
@@ -83,11 +96,14 @@ Common error patterns:
 | `GET` | `/healthz` | none | none | JSON |
 | `POST` | `/ingest/health/v1` | bearer | none | JSON |
 | `GET` | `/debug/recent` | bearer | `ENABLE_DEBUG_ROUTES` | JSON |
-| `GET` | `/analytics/overview` | bearer | `ENABLE_ANALYTICS_ROUTES` | JSON |
-| `GET` | `/analytics/timeseries` | bearer | `ENABLE_ANALYTICS_ROUTES` | JSON |
-| `GET` | `/analytics/events` | bearer | `ENABLE_ANALYTICS_ROUTES` | JSON |
-| `GET` | `/analytics/export.csv` | bearer | `ENABLE_ANALYTICS_ROUTES` | CSV stream |
-| `GET` | `/dashboard` | bearer | `ENABLE_ANALYTICS_ROUTES` | HTML |
+| `GET` | `/login` | none | `ENABLE_ANALYTICS_ROUTES` | HTML |
+| `POST` | `/login` | token form | `ENABLE_ANALYTICS_ROUTES` | Redirect |
+| `POST` | `/logout` | session optional | `ENABLE_ANALYTICS_ROUTES` | Redirect |
+| `GET` | `/analytics/overview` | session or bearer | `ENABLE_ANALYTICS_ROUTES` | JSON |
+| `GET` | `/analytics/timeseries` | session or bearer | `ENABLE_ANALYTICS_ROUTES` | JSON |
+| `GET` | `/analytics/events` | session or bearer | `ENABLE_ANALYTICS_ROUTES` | JSON |
+| `GET` | `/analytics/export.csv` | session or bearer | `ENABLE_ANALYTICS_ROUTES` | CSV stream |
+| `GET` | `/dashboard` | session or bearer | `ENABLE_ANALYTICS_ROUTES` | HTML |
 | `GET` | `/static/*` | none | dashboard support | CSS / JS / other static assets |
 
 ## `GET /healthz`
@@ -248,10 +264,51 @@ Success example:
 }
 ```
 
+## `GET /login`
+
+- **Purpose:** serves the browser login form for the dashboard.
+- **Auth:** none.
+- **Gate:** `ENABLE_ANALYTICS_ROUTES=true`.
+
+Query parameters:
+
+| Name | Required | Type | Constraints | Notes |
+| ---- | -------- | ---- | ----------- | ----- |
+| `next` | no | string | relative path only | Defaults to `/dashboard` |
+
+Behavior notes:
+
+- if the request already has a valid dashboard session cookie, the route redirects to the `next` path
+- if the request includes a valid bearer header, the route starts a dashboard session and redirects to the `next` path
+
+## `POST /login`
+
+- **Purpose:** validates a submitted ingest token and creates a signed dashboard session cookie.
+- **Auth:** none before login.
+- **Gate:** `ENABLE_ANALYTICS_ROUTES=true`.
+
+Form fields:
+
+| Name | Required | Type | Notes |
+| ---- | -------- | ---- | ----- |
+| `token` | yes | string | Must equal `INGEST_TOKEN` |
+| `next` | no | string | Relative redirect target; defaults to `/dashboard` |
+
+Behavior notes:
+
+- success returns `303` to the `next` path and sets the configured session cookie
+- invalid or missing tokens return `401` and re-render the login page with an error message
+
+## `POST /logout`
+
+- **Purpose:** clears the current dashboard session and redirects the browser back to `/login`.
+- **Auth:** no pre-auth required; safe to call even if no session exists.
+- **Gate:** `ENABLE_ANALYTICS_ROUTES=true`.
+
 ## `GET /analytics/overview`
 
 - **Purpose:** returns summary cards grouped by record type.
-- **Auth:** required.
+- **Auth:** required (valid bearer header or dashboard session cookie).
 - **Gate:** `ENABLE_ANALYTICS_ROUTES=true`.
 
 Query parameters:
@@ -290,7 +347,7 @@ Success example:
 ## `GET /analytics/timeseries`
 
 - **Purpose:** returns bucketed time-series points for one record type.
-- **Auth:** required.
+- **Auth:** required (valid bearer header or dashboard session cookie).
 - **Gate:** `ENABLE_ANALYTICS_ROUTES=true`.
 
 Query parameters:
@@ -337,7 +394,7 @@ Success example:
 ## `GET /analytics/events`
 
 - **Purpose:** returns recent normalized canonical events.
-- **Auth:** required.
+- **Auth:** required (valid bearer header or dashboard session cookie).
 - **Gate:** `ENABLE_ANALYTICS_ROUTES=true`.
 
 Query parameters:
@@ -378,7 +435,7 @@ Success example:
 ## `GET /analytics/export.csv`
 
 - **Purpose:** streams filtered canonical events as CSV.
-- **Auth:** required.
+- **Auth:** required (valid bearer header or dashboard session cookie).
 - **Gate:** `ENABLE_ANALYTICS_ROUTES=true`.
 - **Query model:** same filtering model as `/analytics/events`, except `limit` allows `1 <= limit <= 5000` and defaults to `1000`.
 
@@ -403,7 +460,7 @@ Response details:
 ## `GET /dashboard`
 
 - **Purpose:** serves the built-in HTML dashboard shell.
-- **Auth:** required.
+- **Auth:** required (valid bearer header or dashboard session cookie).
 - **Gate:** `ENABLE_ANALYTICS_ROUTES=true`.
 - **Query parameters:** none required by the route itself.
 
@@ -411,10 +468,12 @@ Response details:
 
 - response class: HTML
 - template: `app/templates/dashboard.html`
-- on successful auth, the page receives the verified bearer token in template context so the dashboard JavaScript can call the protected analytics endpoints
+- unauthenticated browser requests are redirected to `/login?next=/dashboard`
+- authenticated dashboard JavaScript uses same-origin requests and the signed browser session cookie to call protected analytics endpoints
 
 Notes:
 
+- direct clients may still call the route with a valid bearer header, which also initializes a browser session cookie
 - this is part of the current HTTP surface, but it is a UI route rather than a JSON API endpoint
 - static assets used by the dashboard are served under `/static/*`
 

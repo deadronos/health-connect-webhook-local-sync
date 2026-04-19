@@ -17,6 +17,39 @@ async def test_overview_requires_auth():
 
 
 @pytest.mark.asyncio
+async def test_overview_accepts_dashboard_session():
+    from httpx import ASGITransport, AsyncClient
+    from app.main import create_app
+
+    app = create_app()
+
+    with patch("app.routes.analytics.client") as mock_client:
+        mock_client.get_analytics_overview.return_value = [
+            {
+                "recordType": "steps",
+                "count": 3,
+                "min": 500.0,
+                "max": 1200.0,
+                "avg": 900.0,
+                "sum": 2700.0,
+                "latestValue": 1200.0,
+                "latestAt": 1710803600000,
+            }
+        ]
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            login_response = await client.post(
+                "/login",
+                data={"token": "test-token", "next": "/dashboard"},
+            )
+            response = await client.get("/analytics/overview")
+
+    assert login_response.status_code == 303
+    assert response.status_code == 200
+    assert response.json()["cards"][0]["record_type"] == "steps"
+
+
+@pytest.mark.asyncio
 async def test_timeseries_returns_points():
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
