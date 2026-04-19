@@ -241,6 +241,62 @@ async def events(
     return AnalyticsEventsResponse(events=[_to_analytics_event(row) for row in rows])
 
 
+def _generate_csv_rows(rows: list[dict]):
+    """Generator that yields CSV rows one at a time from a list of event dictionaries.
+
+    Writes the CSV header first, then yields each row individually, clearing the
+    buffer after each yield to keep memory usage low.
+
+    Args:
+        rows: List of raw event dictionaries from Convex.
+
+    Yields:
+        CSV-formatted strings, one per chunk (header first, then each row).
+    """
+    buffer = io.StringIO()
+    writer = csv.DictWriter(
+        buffer,
+        fieldnames=[
+            "raw_delivery_id",
+            "record_type",
+            "value",
+            "unit",
+            "start_time",
+            "end_time",
+            "captured_at",
+            "device_id",
+            "external_id",
+            "payload_hash",
+            "fingerprint",
+            "metadata",
+        ],
+    )
+    writer.writeheader()
+    yield buffer.getvalue()
+    buffer.seek(0)
+    buffer.truncate(0)
+
+    for event in rows:
+        analytics_event = _to_analytics_event(event)
+        writer.writerow({
+            "raw_delivery_id": analytics_event.raw_delivery_id,
+            "record_type": analytics_event.record_type,
+            "value": analytics_event.value,
+            "unit": analytics_event.unit,
+            "start_time": analytics_event.start_time,
+            "end_time": analytics_event.end_time,
+            "captured_at": analytics_event.captured_at,
+            "device_id": analytics_event.device_id,
+            "external_id": analytics_event.external_id,
+            "payload_hash": analytics_event.payload_hash,
+            "fingerprint": analytics_event.fingerprint,
+            "metadata": json.dumps(analytics_event.metadata or {}, sort_keys=True),
+        })
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+
+
 @router.get("/export.csv")
 async def export_csv(
     request: Request,
@@ -276,44 +332,8 @@ async def export_csv(
         limit=limit,
     )
 
-    buffer = io.StringIO()
-    writer = csv.DictWriter(
-        buffer,
-        fieldnames=[
-            "raw_delivery_id",
-            "record_type",
-            "value",
-            "unit",
-            "start_time",
-            "end_time",
-            "captured_at",
-            "device_id",
-            "external_id",
-            "payload_hash",
-            "fingerprint",
-            "metadata",
-        ],
-    )
-    writer.writeheader()
-    for event in rows:
-        analytics_event = _to_analytics_event(event)
-        writer.writerow({
-            "raw_delivery_id": analytics_event.raw_delivery_id,
-            "record_type": analytics_event.record_type,
-            "value": analytics_event.value,
-            "unit": analytics_event.unit,
-            "start_time": analytics_event.start_time,
-            "end_time": analytics_event.end_time,
-            "captured_at": analytics_event.captured_at,
-            "device_id": analytics_event.device_id,
-            "external_id": analytics_event.external_id,
-            "payload_hash": analytics_event.payload_hash,
-            "fingerprint": analytics_event.fingerprint,
-            "metadata": json.dumps(analytics_event.metadata or {}, sort_keys=True),
-        })
-
     return StreamingResponse(
-        iter([buffer.getvalue()]),
+        _generate_csv_rows(rows),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=health-events.csv"},
     )
