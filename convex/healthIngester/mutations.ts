@@ -1,6 +1,8 @@
 import { mutationGeneric } from "convex/server";
 import { v } from "convex/values";
 
+const dataClassValidator = v.union(v.literal("valid"), v.literal("test"));
+
 const recordTypeValidator = v.union(
   v.literal("steps"),
   v.literal("sleep"),
@@ -30,6 +32,8 @@ const rawDeliveryValidator = {
   status: v.union(v.literal("stored"), v.literal("error")),
   errorMessage: v.optional(v.string()),
   recordCount: v.number(),
+  dataClass: v.optional(dataClassValidator),
+  dataClassReason: v.optional(v.string()),
 };
 
 const healthEventValidator = v.object({
@@ -59,6 +63,8 @@ type RawDelivery = {
   status: "stored" | "error";
   errorMessage?: string;
   recordCount: number;
+  dataClass?: "valid" | "test";
+  dataClassReason?: string;
 };
 
 type HealthEvent = {

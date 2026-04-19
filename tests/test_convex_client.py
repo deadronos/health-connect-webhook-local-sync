@@ -1,9 +1,8 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from app.convex_client import ConvexClient
 
 
-@patch.object(ConvexClient, '_conv_to_json', return_value={})
-def test_store_raw_delivery_calls_mutation(_mock_conv):
+def test_store_raw_delivery_calls_mutation():
     """store_raw_delivery delegates to mutations.js:storeRawDelivery via ConvexHttpClient."""
     client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
 
@@ -13,11 +12,15 @@ def test_store_raw_delivery_calls_mutation(_mock_conv):
             user_agent="test-agent",
             payload_json='{"test": true}',
             record_count=5,
+            data_class="test",
+            data_class_reason="header:x-openclaw-test-data",
         )
         assert result == "delivery-123"
         mock_mut.assert_called_once()
         call_args = mock_mut.call_args
         assert call_args[0][0] == "mutations.js:storeRawDelivery"
+        assert call_args[0][1]["dataClass"] == "test"
+        assert call_args[0][1]["dataClassReason"] == "header:x-openclaw-test-data"
 
 
 def test_ingest_delivery_calls_atomic_mutation():
@@ -43,6 +46,8 @@ def test_ingest_delivery_calls_atomic_mutation():
                 "payloadHash": "hash123",
                 "status": "stored",
                 "recordCount": 2,
+                "dataClass": "test",
+                "dataClassReason": "header:x-openclaw-test-data",
             },
             events=[
                 {
@@ -63,3 +68,4 @@ def test_ingest_delivery_calls_atomic_mutation():
     assert result["stored_records"] == 1
     mock_mut.assert_called_once()
     assert mock_mut.call_args[0][0] == "mutations.js:ingestNormalizedDelivery"
+    assert mock_mut.call_args[0][1]["rawDelivery"]["dataClass"] == "test"

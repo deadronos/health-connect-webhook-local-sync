@@ -86,7 +86,7 @@ Common error patterns:
 - `401` for missing or invalid bearer/session auth on protected routes
 - `404` when a gated route is disabled by config
 - `413` when ingest payload size exceeds `MAX_BODY_BYTES`
-- `422` for invalid request structure, malformed JSON, invalid query params, or invalid time-window validation
+- `422` for invalid request structure, malformed JSON, invalid query params, invalid test-data header values, or invalid time-window validation
 - `500` for server-side persistence failures
 
 ## Route summary
@@ -134,6 +134,7 @@ Notes:
 Headers:
 
 - `Authorization: Bearer <INGEST_TOKEN>`
+- optional `X-OpenClaw-Test-Data: true|false`
 - optional `User-Agent`
 
 Body rules:
@@ -236,6 +237,8 @@ Behavior notes:
 - `stored_records` reports how many non-duplicate normalized events were stored.
 - Raw deliveries are recorded through the atomic ingest mutation, even when some normalized events dedupe away.
 - Canonical events include `fingerprint`, optional `deviceId`, optional `externalId`, and optional `metadata`.
+- `X-OpenClaw-Test-Data: true` marks the stored raw delivery as `test`, making it eligible for scheduled Convex cleanup after the retention window.
+- The bundled `tools/mock_sender.py` uses a dedicated mock-sender user agent and sends the test-data header by default; `X-OpenClaw-Test-Data: false` overrides that classification.
 
 ## `GET /debug/recent`
 

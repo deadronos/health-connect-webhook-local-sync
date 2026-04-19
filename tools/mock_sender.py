@@ -28,6 +28,8 @@ def send_fixture(
     token: str,
     jitter_hours: int = 0,
     repeat: int = 1,
+    mark_test_data: bool = True,
+    user_agent: str = "health-ingest-mock-sender/1.0",
 ) -> bool:
     with open(fixture_path) as f:
         payload = json.load(f)
@@ -35,6 +37,8 @@ def send_fixture(
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
+        "User-Agent": user_agent,
+        "X-OpenClaw-Test-Data": "true" if mark_test_data else "false",
     }
 
     with httpx.Client(timeout=30.0) as client:
@@ -60,6 +64,20 @@ def main():
     parser.add_argument("--token", default="replace_me", help="Bearer token")
     parser.add_argument("--repeat", type=int, default=1, help="Number of times to repeat")
     parser.add_argument("--jitter-hours", type=int, default=0, help="Random timestamp jitter in hours")
+    parser.add_argument("--user-agent", default="health-ingest-mock-sender/1.0", help="User-Agent header")
+    parser.set_defaults(mark_test_data=True)
+    parser.add_argument(
+        "--mark-test-data",
+        dest="mark_test_data",
+        action="store_true",
+        help="Mark the delivery as test data eligible for scheduled cleanup (default)",
+    )
+    parser.add_argument(
+        "--keep-data",
+        dest="mark_test_data",
+        action="store_false",
+        help="Send the fixture without the scheduled-cleanup test-data marker",
+    )
     args = parser.parse_args()
 
     if not args.fixture.exists():
@@ -72,6 +90,8 @@ def main():
         token=args.token,
         jitter_hours=args.jitter_hours,
         repeat=args.repeat,
+        mark_test_data=args.mark_test_data,
+        user_agent=args.user_agent,
     )
     sys.exit(0 if success else 1)
 

@@ -28,6 +28,8 @@ flowchart LR
         events["healthEvents"]
         buckets["healthEventBuckets\nhour/day rollups"]
         fwd["forwardAttempts"]
+      cleanup["scheduled cleanup\ncrons.ts + cleanup.ts"]
+      runs["cleanupRuns"]
     end
 
     sender -->|"POST /ingest/health/v1\nBearer token"| auth
@@ -43,12 +45,18 @@ flowchart LR
     analytics_api -->|"session cookie or bearer"| auth
     analytics_api --> client
 
+    cleanup --> raw
+    cleanup --> events
+    cleanup --> buckets
+    cleanup --> runs
+
     probe -->|"GET /healthz\nno auth"| FastAPI
 
     raw --- Convex
     events --- Convex
     buckets --- Convex
     fwd --- Convex
+    runs --- Convex
 ```
 
 ### What happens on ingest
@@ -56,8 +64,10 @@ flowchart LR
 1. `POST /ingest/health/v1` authenticates with a bearer token.
 2. The payload is validated and auto-detected as either flat `records` format or nested Android format.
 3. The normalizer emits canonical events with `deviceId`, `fingerprint`, and optional `metadata`.
-4. A single Convex mutation stores the raw delivery, inserts only new events by fingerprint, and updates `hour`/`day` rollup buckets.
-5. The response shape stays stable:
+4. Ingest classifies the delivery as `valid` or `test` based on the optional `X-OpenClaw-Test-Data` header and the mock-sender user agent.
+5. A single Convex mutation stores the raw delivery, inserts only new events by fingerprint, and updates `hour`/`day` rollup buckets.
+6. A Convex cron later removes expired `test` deliveries and rebuilds only the affected buckets.
+7. The response shape stays stable:
 
 ```json
 {
@@ -77,6 +87,7 @@ flowchart LR
 - **Dual payload support** — accepts both legacy flat `records` payloads and nested Android Health Connect payloads.
 - **Analytics JSON APIs** — authenticated `/analytics/overview`, `/analytics/timeseries`, `/analytics/events`, and `/analytics/export.csv` with bearer or dashboard-session auth.
 - **Built-in dashboard** — browser-friendly `/login` flow plus authenticated `/dashboard` page served by FastAPI with Jinja2 templates and vanilla JavaScript.
+- **Scheduled test-data cleanup** — Convex classifies mock/explicitly tagged fixture ingests as `test`, deletes them after retention, and rebuilds only the affected analytics buckets.
 - **Debug and health routes** — `/debug/recent` for recent deliveries and `/healthz` for unauthenticated health checks.
 - **Convex self-hosted** — local SQLite-backed persistence without introducing a second database yet.
 
@@ -102,6 +113,7 @@ docker compose up
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
+cd convex && npm install && cd ..
 ```
 
 Create a local `.env` file in the repo root:
@@ -139,11 +151,15 @@ python tools/mock_sender.py \
   --token your-token
 ```
 
+`tools/mock_sender.py` marks fixture sends as test data by default so the scheduled Convex cleanup can remove them later. The cleanup only deletes deliveries explicitly classified as `test`; it does not heuristically purge normal health data. If you want to keep a mock send permanently, pass `--keep-data`.
+
 ### Run the test suite
 
 ```bash
 ./scripts/test.sh
 ```
+
+That script now runs both the Python `pytest` suite and the Convex `vitest` cleanup tests.
 
 ### Open the dashboard
 
@@ -173,6 +189,7 @@ For the full current route contract, including auth expectations, query paramete
 - **Auth:** required
 - **Purpose:** validate a webhook payload, normalize records, store the raw delivery, dedupe events, and update rollups
 - **Response:** `ok`, `received_records`, `stored_records`, `delivery_id`
+- **Optional test-data marker:** `X-OpenClaw-Test-Data: true|false`
 
 ### `GET /healthz`
 
@@ -344,6 +361,9 @@ convex/
   healthIngester/
     mutations.ts
     queries.ts
+    cleanup.ts
+    crons.ts
+    cleanup.test.ts
 
 fixtures/
 tools/
@@ -375,6 +395,7 @@ The current analytics read model is intentionally modest:
 
 - hour/day rollup buckets live in Convex
 - overview and event listing can still scan event rows when that is simpler or more accurate
+- explicitly tagged fixture/test deliveries are removed by a scheduled Convex cleanup that rebuilds only the affected hour/day buckets
 - Postgres is intentionally deferred until real contention or query complexity makes it worth the extra operational weight
 
 ### Useful local commands

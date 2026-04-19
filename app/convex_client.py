@@ -29,6 +29,8 @@ class ConvexClient:
         record_count: int,
         status: str = "stored",
         error_message: Optional[str] = None,
+        data_class: str = "valid",
+        data_class_reason: Optional[str] = None,
     ) -> str:
         payload_hash = hashlib.sha256(payload_json.encode()).hexdigest()
         received_at = int(datetime.now(UTC).timestamp() * 1000)
@@ -42,6 +44,8 @@ class ConvexClient:
                 "status": status,
                 "errorMessage": error_message,
                 "recordCount": record_count,
+                "dataClass": data_class,
+                "dataClassReason": data_class_reason,
             }))
             return str(result) if result else ""
         except ConvexError as e:

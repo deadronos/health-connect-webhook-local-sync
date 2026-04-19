@@ -91,3 +91,5 @@ Revisit PostgreSQL when one or more of these become true:
 ## Notes
 
 This ADR does not claim Convex is the final analytics destination. It records that **for Phase 2**, Convex rollup buckets are the smallest architecture that satisfies the current dashboard and analytics requirements while keeping the project easy to run locally.
+
+When test-tagged deliveries are cleaned up later, affected `hour` and `day` buckets are rebuilt from surviving `healthEvents` rather than adjusted by subtraction so `min`, `max`, and `latest*` values stay correct.

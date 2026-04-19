@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "convex dev"
+    "dev": "convex dev",
+    "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "convex": "^1.35.1"
   },
   "devDependencies": {
-    "typescript": "^6.0.3"
+    "@edge-runtime/vm": "^5.0.0",
+    "convex-test": "^0.0.38",
+    "typescript": "^6.0.3",
+    "vitest": "^3.2.4"
   }
 }

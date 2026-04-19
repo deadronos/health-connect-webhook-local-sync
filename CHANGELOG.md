@@ -1,5 +1,7 @@
 # One Entry per Line
 
+2026-04-19 Add daily Convex cleanup for explicitly tagged test deliveries and rebuild affected analytics buckets
+2026-04-19 Mark mock sender fixture ingests as test data by default and run official Convex cleanup tests from scripts/test.sh
 2026-04-19 Add /login and signed browser sessions for /dashboard and /analytics/** while keeping ingest and debug routes bearer-only
 2026-04-19 Add phase-2 analytics/dashboard implementation plan and repo roadmap
 2026-04-19 Expand canonical health events with device IDs, fingerprints, and optional metadata for analytics
