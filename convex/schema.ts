@@ -11,7 +11,11 @@ export default defineSchema({
     status: v.union(v.literal("stored"), v.literal("error")),
     errorMessage: v.optional(v.string()),
     recordCount: v.number(),
-  }).index("by_payload_hash", ["payloadHash"]),
+    dataClass: v.optional(v.union(v.literal("valid"), v.literal("test"))),
+    dataClassReason: v.optional(v.string()),
+  })
+    .index("by_payload_hash", ["payloadHash"])
+    .index("by_data_class_and_received_at", ["dataClass", "receivedAt"]),
 
   healthEvents: defineTable({
     rawDeliveryId: v.string(),
@@ -71,4 +75,18 @@ export default defineSchema({
     success: v.boolean(),
     errorMessage: v.optional(v.string()),
   }).index("by_delivery", ["rawDeliveryId"]),
+
+  cleanupRuns: defineTable({
+    startedAt: v.number(),
+    finishedAt: v.number(),
+    mode: v.union(v.literal("dry_run"), v.literal("delete")),
+    retentionMs: v.number(),
+    cutoffReceivedAt: v.number(),
+    candidateDeliveryCount: v.number(),
+    candidateEventCount: v.number(),
+    deletedDeliveryCount: v.number(),
+    deletedEventCount: v.number(),
+    deletedForwardAttemptCount: v.number(),
+    rebuiltBucketCount: v.number(),
+  }).index("by_started_at", ["startedAt"]),
 });

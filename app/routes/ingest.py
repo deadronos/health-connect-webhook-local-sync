@@ -18,6 +18,38 @@ client = ConvexClient(
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
+TEST_DATA_HEADER = "x-openclaw-test-data"
+MOCK_SENDER_USER_AGENT_PREFIX = "health-ingest-mock-sender/"
+TRUTHY_HEADER_VALUES = {"1", "true", "yes", "on"}
+FALSEY_HEADER_VALUES = {"0", "false", "no", "off"}
+
+
+def _parse_test_data_header(value: str | None) -> bool | None:
+    if value is None:
+        return None
+
+    normalized = value.strip().lower()
+    if normalized in TRUTHY_HEADER_VALUES:
+        return True
+    if normalized in FALSEY_HEADER_VALUES:
+        return False
+
+    raise HTTPException(status_code=422, detail="X-OpenClaw-Test-Data must be true or false")
+
+
+def _classify_delivery_data(request: Request) -> tuple[str, str | None]:
+    header_value = _parse_test_data_header(request.headers.get(TEST_DATA_HEADER))
+    if header_value is True:
+        return "test", "header:x-openclaw-test-data"
+    if header_value is False:
+        return "valid", None
+
+    user_agent = request.headers.get("user-agent") or ""
+    if user_agent.startswith(MOCK_SENDER_USER_AGENT_PREFIX):
+        return "test", "user-agent:health-ingest-mock-sender"
+
+    return "valid", None
+
 
 @router.post("/health/v1", response_model=IngestResponse)
 async def ingest_health(request: Request):
@@ -104,6 +136,7 @@ async def ingest_health(request: Request):
 
     source_ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent")
+    data_class, data_class_reason = _classify_delivery_data(request)
 
     if is_android_format:
         normalizer = AndroidPayloadNormalizer(
@@ -127,6 +160,8 @@ async def ingest_health(request: Request):
                 "payloadHash": payload_hash,
                 "status": "stored",
                 "recordCount": received_records,
+                "dataClass": data_class,
+                "dataClassReason": data_class_reason,
             },
             events=events,
         )
