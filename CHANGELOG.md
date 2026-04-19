@@ -1,5 +1,6 @@
 # One Entry per Line
 
+2026-04-19 Reinforce timing attack protection in token verification using constant-time `hmac.compare_digest`
 2026-04-19 Add /login and signed browser sessions for /dashboard and /analytics/** while keeping ingest and debug routes bearer-only
 2026-04-19 Add phase-2 analytics/dashboard implementation plan and repo roadmap
 2026-04-19 Expand canonical health events with device IDs, fingerprints, and optional metadata for analytics

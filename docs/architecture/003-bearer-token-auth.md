@@ -85,7 +85,7 @@ The project still leaves room for later HMAC signatures, per-device tokens, or s
 
 ## Notes
 
-The bearer token is checked with constant-time string comparison in `app/auth.py`.
+The bearer token is checked with constant-time comparison (e.g., `hmac.compare_digest`) in `app/auth.py` to protect against timing attacks.
 
 Direct bearer-only routes currently using the token:
 

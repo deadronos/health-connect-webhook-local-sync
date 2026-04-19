@@ -1,4 +1,4 @@
-from secrets import compare_digest
+import hmac
 
 from fastapi import HTTPException, Request
 
@@ -10,9 +10,16 @@ class BearerAuth:
         self.token = token
 
     def verify_token(self, token: str | None) -> bool:
-        if token is None or token == "":
+        """Verify the provided token against the configured ingest token.
+
+        Uses a constant-time comparison to prevent timing attacks.
+        """
+        if not token:
             raise HTTPException(status_code=401, detail="Missing token")
-        if not compare_digest(token, self.token):
+
+        # Use constant-time comparison to prevent timing attacks where an attacker
+        # could guess the token byte-by-byte based on how long the comparison takes.
+        if not hmac.compare_digest(token, self.token):
             raise HTTPException(status_code=401, detail="Invalid token")
         return True
 
