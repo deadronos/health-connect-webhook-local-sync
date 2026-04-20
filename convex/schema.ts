@@ -94,4 +94,14 @@ export default defineSchema({
     deletedForwardAttemptCount: v.number(),
     rebuiltBucketCount: v.number(),
   }).index("by_started_at", ["startedAt"]),
+
+  healthGoals: defineTable({
+    userId: v.string(),
+    recordType: v.string(),
+    targetValue: v.number(),
+    targetUnit: v.string(),
+    period: v.union(v.literal("day"), v.literal("week"), v.literal("month")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user_and_record", ["userId", "recordType"]),
 });
