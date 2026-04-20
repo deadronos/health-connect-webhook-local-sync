@@ -129,22 +129,25 @@ test("detectAnomalies flags buckets exceeding 2 stddev", async () => {
     payloadJson: "{}",
     payloadHash: "anomaly-test",
     status: "completed",
-    recordCount: 4,
+    recordCount: 6,
   });
 
-  // 3 normal buckets of 1000 each, then one outlier of 10000
+  // 5 normal buckets of 1000 each, then one outlier of 1000000
+  // With 5 normal buckets + 1 outlier, z-score limit = sqrt(5) ≈ 2.236 > 2.0
   await t.mutation(apiAny.mutations.ingestNormalizedEventsChunk, {
     rawDeliveryId: deliveryId,
     events: [
       buildEvent({ capturedAt: base, payloadHash: "an-a", fingerprint: "aa", valueNumeric: 1000 }),
       buildEvent({ capturedAt: base + 1 * 24 * 60 * 60 * 1000, payloadHash: "an-b", fingerprint: "ab", valueNumeric: 1000 }),
       buildEvent({ capturedAt: base + 2 * 24 * 60 * 60 * 1000, payloadHash: "an-c", fingerprint: "ac", valueNumeric: 1000 }),
-      buildEvent({ capturedAt: base + 3 * 24 * 60 * 60 * 1000, payloadHash: "an-d", fingerprint: "ad", valueNumeric: 10000 }),
+      buildEvent({ capturedAt: base + 3 * 24 * 60 * 60 * 1000, payloadHash: "an-d", fingerprint: "ad", valueNumeric: 1000 }),
+      buildEvent({ capturedAt: base + 4 * 24 * 60 * 60 * 1000, payloadHash: "an-e", fingerprint: "ae", valueNumeric: 1000 }),
+      buildEvent({ capturedAt: base + 5 * 24 * 60 * 60 * 1000, payloadHash: "an-f", fingerprint: "af", valueNumeric: 1000000 }),
     ],
   });
 
   const fromMs = base;
-  const toMs = base + (4 * 24 * 60 * 60 * 1000) - 1;
+  const toMs = base + (6 * 24 * 60 * 60 * 1000) - 1;
 
   const result = await t.query(apiAny.queries.detectAnomalies, {
     recordType: "steps",
@@ -157,5 +160,5 @@ test("detectAnomalies flags buckets exceeding 2 stddev", async () => {
   expect(result.anomalyCount).toBe(1);
   const anomaly = result.buckets.find((b: any) => b.isAnomaly);
   expect(anomaly).toBeDefined();
-  expect(anomaly!.bucketStart).toBe(base + 3 * 24 * 60 * 60 * 1000);
+  expect(anomaly!.bucketStart).toBe(base + 5 * 24 * 60 * 60 * 1000);
 });
