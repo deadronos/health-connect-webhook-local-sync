@@ -411,3 +411,82 @@ export const detectAnomalies = queryGeneric({
     };
   },
 });
+
+const getPeriodStart = (timestamp: number, period: "day" | "week" | "month"): number => {
+  const date = new Date(timestamp);
+  if (period === "day") {
+    date.setUTCHours(0, 0, 0, 0);
+    return date.getTime();
+  }
+  if (period === "week") {
+    const day = date.getUTCDay();
+    const diff = day === 0 ? -6 : 1 - day; // Monday
+    date.setUTCDate(date.getUTCDate() + diff);
+    date.setUTCHours(0, 0, 0, 0);
+    return date.getTime();
+  }
+  // month
+  date.setUTCDate(1);
+  date.setUTCHours(0, 0, 0, 0);
+  return date.getTime();
+};
+
+export const getPeriodSummaries = queryGeneric({
+  args: {
+    recordTypes: v.array(v.string()),
+    period: v.union(v.literal("day"), v.literal("week"), v.literal("month")),
+    fromMs: v.optional(v.number()),
+    toMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const fromMs = args.fromMs ?? nowMs - (30 * 24 * 60 * 60 * 1000);
+    const toMs = args.toMs ?? nowMs;
+
+    const events = await ctx.db.query("healthEvents").collect();
+    const filtered = events.filter(
+      (e) =>
+        args.recordTypes.includes(e.recordType) &&
+        e.capturedAt >= fromMs &&
+        e.capturedAt <= toMs
+    );
+
+    const groups = new Map<string, { count: number; sum: number; min: number; max: number }>();
+
+    for (const event of filtered) {
+      const periodStart = getPeriodStart(event.capturedAt, args.period);
+      const key = `${periodStart}:${event.recordType}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.count += 1;
+        existing.sum += event.valueNumeric;
+        existing.min = Math.min(existing.min, event.valueNumeric);
+        existing.max = Math.max(existing.max, event.valueNumeric);
+      } else {
+        groups.set(key, {
+          count: 1,
+          sum: event.valueNumeric,
+          min: event.valueNumeric,
+          max: event.valueNumeric,
+        });
+      }
+    }
+
+    const summaries = Array.from(groups.entries()).map(([key, agg]) => {
+      const [periodStartStr, recordType] = key.split(":");
+      const periodStart = Number(periodStartStr);
+      return {
+        periodStart,
+        period: args.period,
+        recordType,
+        count: agg.count,
+        sum: agg.sum,
+        avg: agg.count > 0 ? agg.sum / agg.count : null,
+        min: agg.min,
+        max: agg.max,
+      };
+    });
+
+    return { summaries: summaries.sort((a, b) => a.periodStart - b.periodStart) };
+  },
+});

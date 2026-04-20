@@ -162,3 +162,49 @@ test("detectAnomalies flags buckets exceeding 2 stddev", async () => {
   expect(anomaly).toBeDefined();
   expect(anomaly!.bucketStart).toBe(base + 5 * 24 * 60 * 60 * 1000);
 });
+
+test("getPeriodSummaries returns weekly rollups", async () => {
+  const t = convexTest(schema, modules);
+  const base = Date.UTC(2024, 2, 4, 0, 0, 0, 0); // Monday March 4
+  const deliveryId = await t.mutation(apiAny.mutations.storeRawDelivery, {
+    receivedAt: base,
+    sourceIp: "127.0.0.1",
+    payloadJson: "{}",
+    payloadHash: "period-test",
+    status: "completed",
+    recordCount: 2,
+  });
+
+  await t.mutation(apiAny.mutations.ingestNormalizedEventsChunk, {
+    rawDeliveryId: deliveryId,
+    events: [
+      buildEvent({ capturedAt: base, payloadHash: "p-a", fingerprint: "pa", valueNumeric: 3000 }),
+      buildEvent({ capturedAt: base + 1, payloadHash: "p-b", fingerprint: "pb", valueNumeric: 4000 }),
+    ],
+  });
+
+  // Week 2 (March 11)
+  const week2 = base + 7 * 24 * 60 * 60 * 1000;
+  await t.mutation(apiAny.mutations.ingestNormalizedEventsChunk, {
+    rawDeliveryId: deliveryId,
+    events: [
+      buildEvent({ capturedAt: week2, payloadHash: "p-c", fingerprint: "pc", valueNumeric: 5000 }),
+    ],
+  });
+
+  const fromMs = base;
+  const toMs = week2 + (7 * 24 * 60 * 60 * 1000) - 1;
+
+  const result = await t.query(apiAny.queries.getPeriodSummaries, {
+    recordTypes: ["steps"],
+    period: "week",
+    fromMs,
+    toMs,
+  });
+
+  expect(result.summaries).toHaveLength(2);
+  const week1 = result.summaries.find((s: any) => s.periodStart === base);
+  expect(week1!.sum).toBe(7000);
+  expect(week1!.count).toBe(2);
+  expect(week1!.period).toBe("week");
+});
