@@ -546,6 +546,104 @@ export const getGoalProgress = queryGeneric({
   },
 });
 
+export const getCorrelationHints = queryGeneric({
+  args: {
+    fromMs: v.optional(v.number()),
+    toMs: v.optional(v.number()),
+    recordTypes: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const fromMs = args.fromMs ?? nowMs - (30 * 24 * 60 * 60 * 1000);
+    const toMs = args.toMs ?? nowMs;
+
+    if (args.recordTypes.length < 2 || args.recordTypes.length > 10) {
+      throw new Error("recordTypes must have between 2 and 10 elements");
+    }
+
+    const events = await ctx.db.query("healthEvents").collect();
+    const filtered = events.filter(
+      (e) =>
+        args.recordTypes.includes(e.recordType) &&
+        e.capturedAt >= fromMs &&
+        e.capturedAt <= toMs
+    );
+
+    // Build daily sums per record type
+    const dailySums = new Map<string, Map<number, number>>();
+    for (const event of filtered) {
+      const dayStart = getPeriodStart(event.capturedAt, "day");
+      if (!dailySums.has(event.recordType)) {
+        dailySums.set(event.recordType, new Map());
+      }
+      const dayMap = dailySums.get(event.recordType)!;
+      dayMap.set(dayStart, (dayMap.get(dayStart) ?? 0) + event.valueNumeric);
+    }
+
+    const hints = [];
+    for (let i = 0; i < args.recordTypes.length; i++) {
+      for (let j = i + 1; j < args.recordTypes.length; j++) {
+        const typeA = args.recordTypes[i];
+        const typeB = args.recordTypes[j];
+        const mapA = dailySums.get(typeA);
+        const mapB = dailySums.get(typeB);
+
+        if (!mapA || !mapB) continue;
+
+        const aligned: [number, number][] = [];
+        for (const [day, valA] of mapA) {
+          const valB = mapB.get(day);
+          if (valB !== undefined) {
+            aligned.push([valA, valB]);
+          }
+        }
+
+        if (aligned.length < 5) {
+          hints.push({
+            recordTypeA: typeA,
+            recordTypeB: typeB,
+            correlation: 0,
+            strength: "none",
+            dataPointCount: aligned.length,
+          });
+          continue;
+        }
+
+        const n = aligned.length;
+        const sumX = aligned.reduce((s, [x]) => s + x, 0);
+        const sumY = aligned.reduce((s, [, y]) => s + y, 0);
+        const meanX = sumX / n;
+        const meanY = sumY / n;
+        const num = aligned.reduce((s, [x, y]) => s + (x - meanX) * (y - meanY), 0);
+        const denX = aligned.reduce((s, [x]) => s + (x - meanX) ** 2, 0);
+        const denY = aligned.reduce((s, [, y]) => s + (y - meanY) ** 2, 0);
+        const den = Math.sqrt(denX * denY);
+        if (den === 0) {
+          // No variance in one or both series — skip this pair
+          continue;
+        }
+        const r = num / den;
+        const absR = Math.abs(r);
+        const strength =
+          absR >= 0.7 ? "strong" : absR >= 0.4 ? "moderate" : absR >= 0.2 ? "weak" : "none";
+
+        hints.push({
+          recordTypeA: typeA,
+          recordTypeB: typeB,
+          correlation: r,
+          strength,
+          dataPointCount: n,
+        });
+      }
+    }
+
+    return {
+      hints: hints.filter((h) => h.strength !== "none"),
+      windowMs: toMs - fromMs,
+    };
+  },
+});
+
 const getCurrentPeriodBounds = (
   period: "day" | "week" | "month",
   nowMs: number

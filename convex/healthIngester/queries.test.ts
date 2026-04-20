@@ -208,3 +208,60 @@ test("getPeriodSummaries returns weekly rollups", async () => {
   expect(week1!.count).toBe(2);
   expect(week1!.period).toBe("week");
 });
+
+test("getCorrelationHints returns strong positive correlation between two record types", async () => {
+  const t = convexTest(schema, modules);
+  const base = Date.UTC(2024, 2, 1, 12, 0, 0, 0);
+
+  const d1 = await t.mutation(apiAny.mutations.storeRawDelivery, {
+    receivedAt: base, sourceIp: "127.0.0.1", payloadJson: "{}",
+    payloadHash: "corr-test", status: "completed", recordCount: 2,
+  });
+
+  const makeEvent = (day: number, type: string, val: number, fp: string) => ({
+    rawDeliveryId: d1,
+    recordType: type,
+    valueNumeric: val,
+    unit: type === "heart_rate" ? "bpm" : "count",
+    startTime: base + day * 24 * 60 * 60 * 1000,
+    endTime: base + day * 24 * 60 * 60 * 1000,
+    capturedAt: base + day * 24 * 60 * 60 * 1000,
+    payloadHash: `ph-${fp}`,
+    fingerprint: fp,
+    createdAt: base,
+  });
+
+  await t.mutation(apiAny.mutations.ingestNormalizedEventsChunk, {
+    rawDeliveryId: d1,
+    events: [
+      makeEvent(0, "steps", 5000, "s0"),
+      makeEvent(0, "active_calories", 500, "c0"),
+      makeEvent(1, "steps", 7000, "s1"),
+      makeEvent(1, "active_calories", 700, "c1"),
+      makeEvent(2, "steps", 9000, "s2"),
+      makeEvent(2, "active_calories", 900, "c2"),
+      makeEvent(3, "steps", 6000, "s3"),
+      makeEvent(3, "active_calories", 600, "c3"),
+      makeEvent(4, "steps", 8000, "s4"),
+      makeEvent(4, "active_calories", 800, "c4"),
+    ],
+  });
+
+  const fromMs = base;
+  const toMs = base + (5 * 24 * 60 * 60 * 1000) - 1;
+
+  const result = await t.query(apiAny.queries.getCorrelationHints, {
+    fromMs,
+    toMs,
+    recordTypes: ["steps", "active_calories"],
+  });
+
+  const pair = result.hints.find(
+    (h: any) =>
+      (h.recordTypeA === "steps" && h.recordTypeB === "active_calories") ||
+      (h.recordTypeA === "active_calories" && h.recordTypeB === "steps")
+  );
+  expect(pair).toBeDefined();
+  expect(pair!.strength).toBe("strong");
+  expect(pair!.correlation).toBeGreaterThan(0.9);
+});
