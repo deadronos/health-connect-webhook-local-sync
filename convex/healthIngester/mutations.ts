@@ -364,3 +364,42 @@ export const checkDuplicateDelivery = mutationGeneric({
     return existing.length > 0;
   },
 });
+
+export const setHealthGoal = mutationGeneric({
+  args: {
+    userId: v.string(),
+    recordType: v.string(),
+    targetValue: v.number(),
+    targetUnit: v.string(),
+    period: v.union(v.literal("day"), v.literal("week"), v.literal("month")),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("healthGoals")
+      .withIndex("by_user_and_record", (q) =>
+        q.eq("userId", args.userId).eq("recordType", args.recordType)
+      )
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        targetValue: args.targetValue,
+        targetUnit: args.targetUnit,
+        period: args.period,
+        updatedAt: now,
+      });
+      return existing._id;
+    }
+
+    return await ctx.db.insert("healthGoals", {
+      userId: args.userId,
+      recordType: args.recordType,
+      targetValue: args.targetValue,
+      targetUnit: args.targetUnit,
+      period: args.period,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
