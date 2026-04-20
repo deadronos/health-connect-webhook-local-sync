@@ -309,12 +309,8 @@ export const getTrend = queryGeneric({
     const priorFromMs = fromMs - windowMs;
     const priorToMs = fromMs;
 
-    const currentBuckets = await ctx.db
-      .query("healthEventBuckets")
-      .withIndex("by_bucket", (q) =>
-        q.eq("bucketSize", "day").eq("recordType", args.recordType)
-      )
-      .collect();
+    const currentBuckets = (await ctx.db.query("healthEventBuckets").collect())
+      .filter(b => b.bucketSize === "day" && b.recordType === args.recordType);
 
     const filteredCurrent = currentBuckets.filter(
       (b) => b.bucketStart >= fromMs && b.bucketStart <= toMs
@@ -363,14 +359,10 @@ export const detectAnomalies = queryGeneric({
     const toMs = args.toMs ?? nowMs;
     const threshold = args.threshold ?? 2.0;
 
-    const buckets = await ctx.db
-      .query("healthEventBuckets")
-      .withIndex("by_bucket", (q) =>
-        q.eq("bucketSize", args.bucketSize).eq("recordType", args.recordType)
-      )
-      .collect();
+    const allBuckets = (await ctx.db.query("healthEventBuckets").collect())
+      .filter(b => b.bucketSize === args.bucketSize && b.recordType === args.recordType);
 
-    const filtered = buckets.filter(
+    const filtered = allBuckets.filter(
       (b) => b.bucketStart >= fromMs && b.bucketStart <= toMs
     );
 
