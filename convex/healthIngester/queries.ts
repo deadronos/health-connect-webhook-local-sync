@@ -348,3 +348,66 @@ export const getTrend = queryGeneric({
     };
   },
 });
+
+export const detectAnomalies = queryGeneric({
+  args: {
+    recordType: recordTypeValidator,
+    bucketSize: bucketSizeValidator,
+    fromMs: v.optional(v.number()),
+    toMs: v.optional(v.number()),
+    threshold: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const fromMs = args.fromMs ?? nowMs - (7 * 24 * 60 * 60 * 1000);
+    const toMs = args.toMs ?? nowMs;
+    const threshold = args.threshold ?? 2.0;
+
+    const buckets = await ctx.db
+      .query("healthEventBuckets")
+      .withIndex("by_bucket", (q) =>
+        q.eq("bucketSize", args.bucketSize).eq("recordType", args.recordType)
+      )
+      .collect();
+
+    const filtered = buckets.filter(
+      (b) => b.bucketStart >= fromMs && b.bucketStart <= toMs
+    );
+
+    if (filtered.length < 3) {
+      return {
+        buckets: filtered.map((b) => ({
+          bucketStart: b.bucketStart,
+          value: b.sum,
+          zScore: 0,
+          isAnomaly: false,
+        })),
+        mean: 0,
+        stddev: 0,
+        anomalyCount: 0,
+      };
+    }
+
+    const values = filtered.map((b) => b.sum);
+    const mean = values.reduce((s, v) => s + v, 0) / values.length;
+    const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
+    const stddev = Math.sqrt(variance);
+
+    const bucketsWithScore = filtered.map((b) => {
+      const zScore = stddev > 0 ? (b.sum - mean) / stddev : 0;
+      return {
+        bucketStart: b.bucketStart,
+        value: b.sum,
+        zScore,
+        isAnomaly: Math.abs(zScore) > threshold,
+      };
+    });
+
+    return {
+      buckets: bucketsWithScore,
+      mean,
+      stddev,
+      anomalyCount: bucketsWithScore.filter((b) => b.isAnomaly).length,
+    };
+  },
+});

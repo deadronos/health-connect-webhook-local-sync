@@ -119,3 +119,43 @@ test("getTrend returns up direction when current > prior", async () => {
   expect(trend.priorValue).toBe(3000);
   expect(trend.percentChange).toBeCloseTo(66.67, 1);
 });
+
+test("detectAnomalies flags buckets exceeding 2 stddev", async () => {
+  const t = convexTest(schema, modules);
+  const base = Date.UTC(2024, 2, 1, 0, 0, 0, 0);
+  const deliveryId = await t.mutation(apiAny.mutations.storeRawDelivery, {
+    receivedAt: base,
+    sourceIp: "127.0.0.1",
+    payloadJson: "{}",
+    payloadHash: "anomaly-test",
+    status: "completed",
+    recordCount: 4,
+  });
+
+  // 3 normal buckets of 1000 each, then one outlier of 10000
+  await t.mutation(apiAny.mutations.ingestNormalizedEventsChunk, {
+    rawDeliveryId: deliveryId,
+    events: [
+      buildEvent({ capturedAt: base, payloadHash: "an-a", fingerprint: "aa", valueNumeric: 1000 }),
+      buildEvent({ capturedAt: base + 1 * 24 * 60 * 60 * 1000, payloadHash: "an-b", fingerprint: "ab", valueNumeric: 1000 }),
+      buildEvent({ capturedAt: base + 2 * 24 * 60 * 60 * 1000, payloadHash: "an-c", fingerprint: "ac", valueNumeric: 1000 }),
+      buildEvent({ capturedAt: base + 3 * 24 * 60 * 60 * 1000, payloadHash: "an-d", fingerprint: "ad", valueNumeric: 10000 }),
+    ],
+  });
+
+  const fromMs = base;
+  const toMs = base + (4 * 24 * 60 * 60 * 1000) - 1;
+
+  const result = await t.query(apiAny.queries.detectAnomalies, {
+    recordType: "steps",
+    bucketSize: "day",
+    fromMs,
+    toMs,
+    threshold: 2.0,
+  });
+
+  expect(result.anomalyCount).toBe(1);
+  const anomaly = result.buckets.find((b: any) => b.isAnomaly);
+  expect(anomaly).toBeDefined();
+  expect(anomaly!.bucketStart).toBe(base + 3 * 24 * 60 * 60 * 1000);
+});
