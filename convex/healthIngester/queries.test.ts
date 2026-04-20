@@ -76,7 +76,7 @@ test("setHealthGoal creates a new goal and getGoalProgress returns it", async ()
 
 test("getTrend returns up direction when current > prior", async () => {
   const t = convexTest(schema, modules);
-  const base = Date.UTC(2024, 2, 1, 0, 0, 0, 0);
+  const base = Date.UTC(2024, 2, 1, 0, 0, 0, 0); // March 1
   const deliveryId = await t.mutation(apiAny.mutations.storeRawDelivery, {
     receivedAt: base,
     sourceIp: "127.0.0.1",
@@ -86,23 +86,27 @@ test("getTrend returns up direction when current > prior", async () => {
     recordCount: 2,
   });
 
+  // Prior window: Feb 23 (7 days before March 1)
+  const priorEventTime = base - 7 * 24 * 60 * 60 * 1000;
   await t.mutation(apiAny.mutations.ingestNormalizedEventsChunk, {
     rawDeliveryId: deliveryId,
     events: [
-      buildEvent({ capturedAt: base, payloadHash: "trend-a", fingerprint: "ta", valueNumeric: 1000 }),
-      buildEvent({ capturedAt: base + 60_000, payloadHash: "trend-b", fingerprint: "tb", valueNumeric: 2000 }),
+      buildEvent({ capturedAt: priorEventTime, payloadHash: "trend-a", fingerprint: "ta", valueNumeric: 1000 }),
+      buildEvent({ capturedAt: priorEventTime + 60_000, payloadHash: "trend-b", fingerprint: "tb", valueNumeric: 2000 }),
     ],
   });
 
+  // Current window: March 8 (just after the current window starts)
+  const currentEventTime = base + 7 * 24 * 60 * 60 * 1000;
   await t.mutation(apiAny.mutations.ingestNormalizedEventsChunk, {
     rawDeliveryId: deliveryId,
     events: [
-      buildEvent({ capturedAt: base + 7 * 24 * 60 * 60 * 1000, payloadHash: "trend-c", fingerprint: "tc", valueNumeric: 5000 }),
+      buildEvent({ capturedAt: currentEventTime, payloadHash: "trend-c", fingerprint: "tc", valueNumeric: 5000 }),
     ],
   });
 
   const fromMs = base;
-  const toMs = base + (7 * 24 * 60 * 60 * 1000) - 1;
+  const toMs = base + (8 * 24 * 60 * 60 * 1000) - 1;
 
   const trend = await t.query(apiAny.queries.getTrend, {
     recordType: "steps",

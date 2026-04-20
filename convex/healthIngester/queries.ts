@@ -297,7 +297,7 @@ export const checkDbHealth = queryGeneric({
 
 export const getTrend = queryGeneric({
   args: {
-    recordType: v.string(),
+    recordType: recordTypeValidator,
     fromMs: v.optional(v.number()),
     toMs: v.optional(v.number()),
   },
