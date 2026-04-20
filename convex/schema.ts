@@ -70,7 +70,7 @@ export default defineSchema({
     max: v.number(),
     latestValue: v.number(),
     latestAt: v.number(),
-  }).index("by_bucket", ["bucketSize", "recordType", "bucketStart", "deviceId"]),
+  }).index("by_bucket", ["bucketSize", "recordType", "bucketStart"]),
 
   forwardAttempts: defineTable({
     rawDeliveryId: v.string(),
