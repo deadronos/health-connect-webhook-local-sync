@@ -449,3 +449,180 @@ class ConvexClient:
             return result if isinstance(result, dict) else {}
         except ConvexError as e:
             raise Exception(f"Convex error: {e}") from e
+
+    def get_trend(self, record_type: str, from_ms: Optional[int] = None, to_ms: Optional[int] = None) -> dict:
+        """Fetch trend analysis for a record type.
+
+        Args:
+            record_type: Type of health record (e.g., "steps").
+            from_ms: Start of current window in Unix ms.
+            to_ms: End of current window in Unix ms.
+
+        Returns:
+            dict with direction, percentChange, currentValue, priorValue.
+
+        Raises:
+            Exception: If the Convex query fails.
+        """
+        try:
+            result = self._client.query("queries.js:getTrend", self._conv_to_json({
+                "recordType": record_type,
+                "fromMs": from_ms,
+                "toMs": to_ms,
+            }))
+            return result if isinstance(result, dict) else {}
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
+
+    def detect_anomalies(
+        self,
+        record_type: str,
+        bucket_size: str,
+        from_ms: Optional[int] = None,
+        to_ms: Optional[int] = None,
+        threshold: Optional[float] = None,
+    ) -> dict:
+        """Detect anomalous buckets for a record type.
+
+        Args:
+            record_type: Type of health record.
+            bucket_size: "hour" or "day".
+            from_ms: Start of window in Unix ms.
+            to_ms: End of window in Unix ms.
+            threshold: Number of stddevs to flag (default 2.0).
+
+        Returns:
+            dict with buckets, mean, stddev, anomalyCount.
+
+        Raises:
+            Exception: If the Convex query fails.
+        """
+        try:
+            result = self._client.query("queries.js:detectAnomalies", self._conv_to_json({
+                "recordType": record_type,
+                "bucketSize": bucket_size,
+                "fromMs": from_ms,
+                "toMs": to_ms,
+                "threshold": threshold,
+            }))
+            return result if isinstance(result, dict) else {}
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
+
+    def get_period_summaries(
+        self,
+        record_types: list[str],
+        period: str,
+        from_ms: Optional[int] = None,
+        to_ms: Optional[int] = None,
+    ) -> dict:
+        """Fetch period summaries for multiple record types.
+
+        Args:
+            record_types: List of record types to include.
+            period: "day", "week", or "month".
+            from_ms: Start of window in Unix ms.
+            to_ms: End of window in Unix ms.
+
+        Returns:
+            dict with summaries array.
+
+        Raises:
+            Exception: If the Convex query fails.
+        """
+        try:
+            result = self._client.query("queries.js:getPeriodSummaries", self._conv_to_json({
+                "recordTypes": record_types,
+                "period": period,
+                "fromMs": from_ms,
+                "toMs": to_ms,
+            }))
+            return result if isinstance(result, dict) else {}
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
+
+    def get_goal_progress(self, user_id: str, record_type: Optional[str] = None) -> dict:
+        """Fetch goal progress for a user.
+
+        Args:
+            user_id: User identifier.
+            record_type: Optional specific record type (omit for all goals).
+
+        Returns:
+            dict with goals array.
+
+        Raises:
+            Exception: If the Convex query fails.
+        """
+        try:
+            result = self._client.query("queries.js:getGoalProgress", self._conv_to_json({
+                "userId": user_id,
+                "recordType": record_type,
+            }))
+            return result if isinstance(result, dict) else {}
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
+
+    def set_health_goal(
+        self,
+        user_id: str,
+        record_type: str,
+        target_value: float,
+        target_unit: str,
+        period: str,
+    ) -> str:
+        """Create or update a health goal.
+
+        Args:
+            user_id: User identifier.
+            record_type: Type of health record.
+            target_value: Target value to reach.
+            target_unit: Unit of the target.
+            period: "day", "week", or "month".
+
+        Returns:
+            Goal ID string.
+
+        Raises:
+            Exception: If the Convex mutation fails.
+        """
+        try:
+            result = self._client.mutation("mutations.js:setHealthGoal", self._conv_to_json({
+                "userId": user_id,
+                "recordType": record_type,
+                "targetValue": target_value,
+                "targetUnit": target_unit,
+                "period": period,
+            }))
+            return str(result) if result else ""
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
+
+    def get_correlation_hints(
+        self,
+        record_types: list[str],
+        from_ms: Optional[int] = None,
+        to_ms: Optional[int] = None,
+    ) -> dict:
+        """Fetch correlation hints between record type pairs.
+
+        Args:
+            record_types: List of 2-10 record types to correlate.
+            from_ms: Start of window in Unix ms.
+            to_ms: End of window in Unix ms.
+
+        Returns:
+            dict with hints array and windowMs.
+
+        Raises:
+            Exception: If the Convex query fails.
+        """
+        try:
+            result = self._client.query("queries.js:getCorrelationHints", self._conv_to_json({
+                "recordTypes": record_types,
+                "fromMs": from_ms,
+                "toMs": to_ms,
+            }))
+            return result if isinstance(result, dict) else {}
+        except ConvexError as e:
+            raise Exception(f"Convex error: {e}") from e
