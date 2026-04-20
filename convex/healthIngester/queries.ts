@@ -490,3 +490,86 @@ export const getPeriodSummaries = queryGeneric({
     return { summaries: summaries.sort((a, b) => a.periodStart - b.periodStart) };
   },
 });
+
+export const getGoalProgress = queryGeneric({
+  args: {
+    userId: v.string(),
+    recordType: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const goalsQuery = ctx.db.query("healthGoals");
+    let goals;
+    if (args.recordType) {
+      goals = await goalsQuery
+        .withIndex("by_user_and_record", (q) =>
+          q.eq("userId", args.userId).eq("recordType", args.recordType)
+        )
+        .collect();
+    } else {
+      goals = await goalsQuery.collect();
+      goals = goals.filter((g) => g.userId === args.userId);
+    }
+
+    const result = [];
+
+    for (const goal of goals) {
+      const { periodStart, periodEnd } = getCurrentPeriodBounds(goal.period, nowMs);
+      const events = await ctx.db.query("healthEvents").collect();
+      const periodEvents = events.filter(
+        (e) =>
+          e.recordType === goal.recordType &&
+          e.capturedAt >= periodStart &&
+          e.capturedAt < periodEnd
+      );
+      const currentValue = periodEvents.reduce((s, e) => s + e.valueNumeric, 0);
+      const elapsedMs = nowMs - periodStart;
+      const periodTotalMs = periodEnd - periodStart;
+      const percentComplete = (currentValue / goal.targetValue) * 100;
+      const daysRemaining = Math.ceil((periodEnd - nowMs) / (24 * 60 * 60 * 1000));
+      const isOnTrack = currentValue * periodTotalMs >= goal.targetValue * elapsedMs;
+
+      result.push({
+        recordType: goal.recordType,
+        targetValue: goal.targetValue,
+        targetUnit: goal.targetUnit,
+        period: goal.period,
+        currentValue,
+        percentComplete,
+        daysRemaining: Math.max(0, daysRemaining),
+        isOnTrack,
+        updatedAt: goal.updatedAt,
+      });
+    }
+
+    return { goals: result };
+  },
+});
+
+const getCurrentPeriodBounds = (
+  period: "day" | "week" | "month",
+  nowMs: number
+): { periodStart: number; periodEnd: number } => {
+  const now = new Date(nowMs);
+  if (period === "day") {
+    const start = new Date(now);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
+    return { periodStart: start.getTime(), periodEnd: end.getTime() };
+  }
+  if (period === "week") {
+    const start = new Date(now);
+    const day = start.getUTCDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    start.setUTCDate(start.getUTCDate() + diff);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 7);
+    return { periodStart: start.getTime(), periodEnd: end.getTime() };
+  }
+  // month
+  const start = new Date(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const end = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+  return { periodStart: start.getTime(), periodEnd: end.getTime() };
+};
