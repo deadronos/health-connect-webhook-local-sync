@@ -1,6 +1,10 @@
+"""Tests for Pydantic schema validation of ingest request/response formats."""
+
 from app.schemas import IngestRequest, WebhookRecord
 
+
 def test_ingest_request_parses_valid_payload():
+    """IngestRequest should correctly parse a valid generic-format payload."""
     payload = {
         "records": [
             {

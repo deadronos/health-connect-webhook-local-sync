@@ -1,3 +1,5 @@
+"""Analytics endpoints for querying aggregated health event statistics."""
+
 import csv
 import io
 import json
@@ -30,6 +32,16 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 def _validate_request(request: Request, from_ms: Optional[int], to_ms: Optional[int]) -> None:
+    """Validate that analytics routes are enabled and request parameters are consistent.
+
+    Args:
+        request: The incoming HTTP request.
+        from_ms: Start of the time window in Unix milliseconds.
+        to_ms: End of the time window in Unix milliseconds.
+
+    Raises:
+        HTTPException: 404 if analytics routes are disabled, 422 if from_ms > to_ms.
+    """
     if not settings.enable_analytics_routes:
         raise HTTPException(status_code=404, detail="Analytics routes disabled")
 
@@ -40,6 +52,14 @@ def _validate_request(request: Request, from_ms: Optional[int], to_ms: Optional[
 
 
 def _to_analytics_event(event: dict) -> AnalyticsEvent:
+    """Convert a raw event dictionary from Convex into an AnalyticsEvent schema.
+
+    Args:
+        event: Raw event dictionary with camelCase keys from Convex.
+
+    Returns:
+        An AnalyticsEvent Pydantic model with the event data.
+    """
     fingerprint = event.get("fingerprint") or event["payloadHash"]
     return AnalyticsEvent(
         raw_delivery_id=event["rawDeliveryId"],
@@ -58,6 +78,15 @@ def _to_analytics_event(event: dict) -> AnalyticsEvent:
 
 
 def _timeseries_value(row: dict, stat: str) -> float:
+    """Extract the value for a requested statistic from a timeseries row.
+
+    Args:
+        row: A single timeseries data point from Convex.
+        stat: The statistic name to extract ("count", "sum", "avg", etc.).
+
+    Returns:
+        The float value of the requested statistic, or 0.0 if not present.
+    """
     key_map = {
         "count": "count",
         "sum": "sum",
@@ -77,6 +106,21 @@ async def overview(
     record_type: list[RecordType] | None = Query(default=None),
     device_id: str | None = Query(default=None),
 ):
+    """Get aggregated summary statistics for health events.
+
+    Returns one card per record type with count, min, max, avg, sum, and
+    the latest value. Results can be filtered by time window and device.
+
+    Args:
+        request: The incoming HTTP request.
+        from_ms: Start of time window in Unix milliseconds (inclusive).
+        to_ms: End of time window in Unix milliseconds (inclusive).
+        record_type: Optional list of record types to filter by.
+        device_id: Optional device ID to filter results to one device.
+
+    Returns:
+        An AnalyticsOverviewResponse with a card per record type.
+    """
     _validate_request(request, from_ms, to_ms)
 
     overview_cards = client.get_analytics_overview(
@@ -112,6 +156,24 @@ async def timeseries(
     to_ms: int | None = Query(default=None, ge=0),
     device_id: str | None = Query(default=None),
 ):
+    """Get time-bucketed analytics for a specific record type.
+
+    Returns data points grouped into hourly or daily buckets, each with
+    the requested statistic (sum, avg, count, etc.).
+
+    Args:
+        request: The incoming HTTP request.
+        record_type: The type of health record to query (required).
+        bucket: Time bucket size — "hour" or "day" (default "day").
+        stat: Which statistic to return per bucket — "sum", "avg", "count",
+            "min", "max", or "latest_value" (default "sum").
+        from_ms: Start of time window in Unix milliseconds.
+        to_ms: End of time window in Unix milliseconds.
+        device_id: Optional device ID to filter results.
+
+    Returns:
+        An AnalyticsTimeseriesResponse with ordered data points.
+    """
     _validate_request(request, from_ms, to_ms)
 
     rows = client.get_analytics_timeseries(
@@ -151,6 +213,22 @@ async def events(
     device_id: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=1000),
 ):
+    """List individual health events with optional filtering.
+
+    Returns raw events rather than aggregated statistics. Useful for
+    debugging and detailed inspection of specific records.
+
+    Args:
+        request: The incoming HTTP request.
+        from_ms: Start of time window in Unix milliseconds.
+        to_ms: End of time window in Unix milliseconds.
+        record_type: Optional list of record types to filter by.
+        device_id: Optional device ID to filter results.
+        limit: Maximum events to return (default 100, max 1000).
+
+    Returns:
+        An AnalyticsEventsResponse with a list of individual events.
+    """
     _validate_request(request, from_ms, to_ms)
 
     rows = client.list_analytics_events(
@@ -163,25 +241,18 @@ async def events(
     return AnalyticsEventsResponse(events=[_to_analytics_event(row) for row in rows])
 
 
-@router.get("/export.csv")
-async def export_csv(
-    request: Request,
-    from_ms: int | None = Query(default=None, ge=0),
-    to_ms: int | None = Query(default=None, ge=0),
-    record_type: list[RecordType] | None = Query(default=None),
-    device_id: str | None = Query(default=None),
-    limit: int = Query(default=1000, ge=1, le=5000),
-):
-    _validate_request(request, from_ms, to_ms)
+def _generate_csv_rows(rows: list[dict]):
+    """Generator that yields CSV rows one at a time from a list of event dictionaries.
 
-    rows = client.list_analytics_events(
-        from_ms=from_ms,
-        to_ms=to_ms,
-        record_types=[item.value for item in record_type] if record_type else None,
-        device_id=device_id,
-        limit=limit,
-    )
+    Writes the CSV header first, then yields each row individually, clearing the
+    buffer after each yield to keep memory usage low.
 
+    Args:
+        rows: List of raw event dictionaries from Convex.
+
+    Yields:
+        CSV-formatted strings, one per chunk (header first, then each row).
+    """
     buffer = io.StringIO()
     writer = csv.DictWriter(
         buffer,
@@ -201,6 +272,10 @@ async def export_csv(
         ],
     )
     writer.writeheader()
+    yield buffer.getvalue()
+    buffer.seek(0)
+    buffer.truncate(0)
+
     for event in rows:
         analytics_event = _to_analytics_event(event)
         writer.writerow({
@@ -217,9 +292,48 @@ async def export_csv(
             "fingerprint": analytics_event.fingerprint,
             "metadata": json.dumps(analytics_event.metadata or {}, sort_keys=True),
         })
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+
+
+@router.get("/export.csv")
+async def export_csv(
+    request: Request,
+    from_ms: int | None = Query(default=None, ge=0),
+    to_ms: int | None = Query(default=None, ge=0),
+    record_type: list[RecordType] | None = Query(default=None),
+    device_id: str | None = Query(default=None),
+    limit: int = Query(default=1000, ge=1, le=5000),
+):
+    """Export filtered health events as a CSV file download.
+
+    Returns the same data as the /events endpoint but formatted as a
+    CSV file for easy download and analysis in spreadsheet tools.
+
+    Args:
+        request: The incoming HTTP request.
+        from_ms: Start of time window in Unix milliseconds.
+        to_ms: End of time window in Unix milliseconds.
+        record_type: Optional list of record types to filter by.
+        device_id: Optional device ID to filter results.
+        limit: Maximum events to export (default 1000, max 5000).
+
+    Returns:
+        A StreamingResponse with CSV content and a download attachment header.
+    """
+    _validate_request(request, from_ms, to_ms)
+
+    rows = client.list_analytics_events(
+        from_ms=from_ms,
+        to_ms=to_ms,
+        record_types=[item.value for item in record_type] if record_type else None,
+        device_id=device_id,
+        limit=limit,
+    )
 
     return StreamingResponse(
-        iter([buffer.getvalue()]),
+        _generate_csv_rows(rows),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=health-events.csv"},
     )

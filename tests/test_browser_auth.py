@@ -1,8 +1,11 @@
+"""Tests for browser-based login/logout flow and session management."""
+
 import pytest
 
 
 @pytest.mark.asyncio
 async def test_login_page_renders_html():
+    """GET /login should return the login form HTML page."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -18,6 +21,7 @@ async def test_login_page_renders_html():
 
 @pytest.mark.asyncio
 async def test_login_sets_session_cookie_and_redirects():
+    """POST /login with valid credentials should set a session cookie and redirect."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -36,6 +40,7 @@ async def test_login_sets_session_cookie_and_redirects():
 
 @pytest.mark.asyncio
 async def test_login_rejects_invalid_token():
+    """POST /login with a wrong token should return 401 with an error message."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -53,6 +58,7 @@ async def test_login_rejects_invalid_token():
 
 @pytest.mark.asyncio
 async def test_logout_clears_dashboard_session():
+    """POST /logout should clear the session and redirect back to login."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 
@@ -71,6 +77,7 @@ async def test_logout_clears_dashboard_session():
 
 @pytest.mark.asyncio
 async def test_dashboard_session_does_not_authorize_ingest_or_debug():
+    """A dashboard session cookie should not grant access to ingest or debug endpoints."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 

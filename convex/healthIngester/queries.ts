@@ -294,3 +294,372 @@ export const checkDbHealth = queryGeneric({
     }
   },
 });
+
+export const getTrend = queryGeneric({
+  args: {
+    recordType: recordTypeValidator,
+    fromMs: v.optional(v.number()),
+    toMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const fromMs = args.fromMs ?? nowMs - (7 * 24 * 60 * 60 * 1000);
+    const toMs = args.toMs ?? nowMs;
+    const windowMs = toMs - fromMs;
+    const priorFromMs = fromMs - windowMs;
+    const priorToMs = fromMs;
+
+    const currentBuckets = (await ctx.db.query("healthEventBuckets").collect())
+      .filter(b => b.bucketSize === "day" && b.recordType === args.recordType);
+
+    const filteredCurrent = currentBuckets.filter(
+      (b) => b.bucketStart >= fromMs && b.bucketStart <= toMs
+    );
+    const filteredPrior = currentBuckets.filter(
+      (b) => b.bucketStart >= priorFromMs && b.bucketStart < priorToMs
+    );
+
+    const currentValue = filteredCurrent.reduce((sum, b) => sum + b.sum, 0);
+    const priorValue = filteredPrior.reduce((sum, b) => sum + b.sum, 0);
+
+    let percentChange: number | null = null;
+    let direction: "up" | "down" | "flat" = "flat";
+
+    if (priorValue > 0) {
+      percentChange = ((currentValue - priorValue) / priorValue) * 100;
+      if (Math.abs(percentChange) < 1) {
+        direction = "flat";
+      } else {
+        direction = percentChange > 0 ? "up" : "down";
+      }
+    }
+
+    return {
+      direction,
+      percentChange,
+      currentValue,
+      priorValue,
+      currentWindowMs: windowMs,
+      priorWindowMs: windowMs,
+    };
+  },
+});
+
+export const detectAnomalies = queryGeneric({
+  args: {
+    recordType: recordTypeValidator,
+    bucketSize: bucketSizeValidator,
+    fromMs: v.optional(v.number()),
+    toMs: v.optional(v.number()),
+    threshold: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const fromMs = args.fromMs ?? nowMs - (7 * 24 * 60 * 60 * 1000);
+    const toMs = args.toMs ?? nowMs;
+    const threshold = args.threshold ?? 2.0;
+
+    const allBuckets = (await ctx.db.query("healthEventBuckets").collect())
+      .filter(b => b.bucketSize === args.bucketSize && b.recordType === args.recordType);
+
+    const filtered = allBuckets.filter(
+      (b) => b.bucketStart >= fromMs && b.bucketStart <= toMs
+    );
+
+    if (filtered.length < 3) {
+      return {
+        buckets: filtered.map((b) => ({
+          bucketStart: b.bucketStart,
+          value: b.sum,
+          zScore: 0,
+          isAnomaly: false,
+        })),
+        mean: 0,
+        stddev: 0,
+        anomalyCount: 0,
+      };
+    }
+
+    const values = filtered.map((b) => b.sum);
+    const mean = values.reduce((s, v) => s + v, 0) / values.length;
+    const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
+    const stddev = Math.sqrt(variance);
+
+    const bucketsWithScore = filtered.map((b) => {
+      const zScore = stddev > 0 ? (b.sum - mean) / stddev : 0;
+      return {
+        bucketStart: b.bucketStart,
+        value: b.sum,
+        zScore,
+        isAnomaly: Math.abs(zScore) > threshold,
+      };
+    });
+
+    return {
+      buckets: bucketsWithScore,
+      mean,
+      stddev,
+      anomalyCount: bucketsWithScore.filter((b) => b.isAnomaly).length,
+    };
+  },
+});
+
+const getPeriodStart = (timestamp: number, period: "day" | "week" | "month"): number => {
+  const date = new Date(timestamp);
+  if (period === "day") {
+    date.setUTCHours(0, 0, 0, 0);
+    return date.getTime();
+  }
+  if (period === "week") {
+    const day = date.getUTCDay();
+    const diff = day === 0 ? -6 : 1 - day; // Monday
+    date.setUTCDate(date.getUTCDate() + diff);
+    date.setUTCHours(0, 0, 0, 0);
+    return date.getTime();
+  }
+  // month
+  date.setUTCDate(1);
+  date.setUTCHours(0, 0, 0, 0);
+  return date.getTime();
+};
+
+export const getPeriodSummaries = queryGeneric({
+  args: {
+    recordTypes: v.array(v.string()),
+    period: v.union(v.literal("day"), v.literal("week"), v.literal("month")),
+    fromMs: v.optional(v.number()),
+    toMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const fromMs = args.fromMs ?? nowMs - (30 * 24 * 60 * 60 * 1000);
+    const toMs = args.toMs ?? nowMs;
+
+    const events = await ctx.db.query("healthEvents").collect();
+    const filtered = events.filter(
+      (e) =>
+        args.recordTypes.includes(e.recordType) &&
+        e.capturedAt >= fromMs &&
+        e.capturedAt <= toMs
+    );
+
+    const groups = new Map<string, { count: number; sum: number; min: number; max: number }>();
+
+    for (const event of filtered) {
+      const periodStart = getPeriodStart(event.capturedAt, args.period);
+      const key = `${periodStart}:${event.recordType}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.count += 1;
+        existing.sum += event.valueNumeric;
+        existing.min = Math.min(existing.min, event.valueNumeric);
+        existing.max = Math.max(existing.max, event.valueNumeric);
+      } else {
+        groups.set(key, {
+          count: 1,
+          sum: event.valueNumeric,
+          min: event.valueNumeric,
+          max: event.valueNumeric,
+        });
+      }
+    }
+
+    const summaries = Array.from(groups.entries()).map(([key, agg]) => {
+      const [periodStartStr, recordType] = key.split(":");
+      const periodStart = Number(periodStartStr);
+      return {
+        periodStart,
+        period: args.period,
+        recordType,
+        count: agg.count,
+        sum: agg.sum,
+        avg: agg.count > 0 ? agg.sum / agg.count : null,
+        min: agg.min,
+        max: agg.max,
+      };
+    });
+
+    return { summaries: summaries.sort((a, b) => a.periodStart - b.periodStart) };
+  },
+});
+
+export const getGoalProgress = queryGeneric({
+  args: {
+    userId: v.string(),
+    recordType: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const goalsQuery = ctx.db.query("healthGoals");
+    let goals;
+    if (args.recordType) {
+      goals = await goalsQuery
+        .withIndex("by_user_and_record", (q) =>
+          q.eq("userId", args.userId).eq("recordType", args.recordType)
+        )
+        .collect();
+    } else {
+      goals = await goalsQuery.collect();
+      goals = goals.filter((g) => g.userId === args.userId);
+    }
+
+    const result = [];
+
+    for (const goal of goals) {
+      const { periodStart, periodEnd } = getCurrentPeriodBounds(goal.period, nowMs);
+      const events = await ctx.db.query("healthEvents").collect();
+      const periodEvents = events.filter(
+        (e) =>
+          e.recordType === goal.recordType &&
+          e.capturedAt >= periodStart &&
+          e.capturedAt < periodEnd
+      );
+      const currentValue = periodEvents.reduce((s, e) => s + e.valueNumeric, 0);
+      const elapsedMs = nowMs - periodStart;
+      const periodTotalMs = periodEnd - periodStart;
+      const percentComplete = (currentValue / goal.targetValue) * 100;
+      const daysRemaining = Math.ceil((periodEnd - nowMs) / (24 * 60 * 60 * 1000));
+      const isOnTrack = currentValue * periodTotalMs >= goal.targetValue * elapsedMs;
+
+      result.push({
+        recordType: goal.recordType,
+        targetValue: goal.targetValue,
+        targetUnit: goal.targetUnit,
+        period: goal.period,
+        currentValue,
+        percentComplete,
+        daysRemaining: Math.max(0, daysRemaining),
+        isOnTrack,
+        updatedAt: goal.updatedAt,
+      });
+    }
+
+    return { goals: result };
+  },
+});
+
+export const getCorrelationHints = queryGeneric({
+  args: {
+    fromMs: v.optional(v.number()),
+    toMs: v.optional(v.number()),
+    recordTypes: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const fromMs = args.fromMs ?? nowMs - (30 * 24 * 60 * 60 * 1000);
+    const toMs = args.toMs ?? nowMs;
+
+    if (args.recordTypes.length < 2 || args.recordTypes.length > 10) {
+      throw new Error("recordTypes must have between 2 and 10 elements");
+    }
+
+    const events = await ctx.db.query("healthEvents").collect();
+    const filtered = events.filter(
+      (e) =>
+        args.recordTypes.includes(e.recordType) &&
+        e.capturedAt >= fromMs &&
+        e.capturedAt <= toMs
+    );
+
+    // Build daily sums per record type
+    const dailySums = new Map<string, Map<number, number>>();
+    for (const event of filtered) {
+      const dayStart = getPeriodStart(event.capturedAt, "day");
+      if (!dailySums.has(event.recordType)) {
+        dailySums.set(event.recordType, new Map());
+      }
+      const dayMap = dailySums.get(event.recordType)!;
+      dayMap.set(dayStart, (dayMap.get(dayStart) ?? 0) + event.valueNumeric);
+    }
+
+    const hints = [];
+    for (let i = 0; i < args.recordTypes.length; i++) {
+      for (let j = i + 1; j < args.recordTypes.length; j++) {
+        const typeA = args.recordTypes[i];
+        const typeB = args.recordTypes[j];
+        const mapA = dailySums.get(typeA);
+        const mapB = dailySums.get(typeB);
+
+        if (!mapA || !mapB) continue;
+
+        const aligned: [number, number][] = [];
+        for (const [day, valA] of mapA) {
+          const valB = mapB.get(day);
+          if (valB !== undefined) {
+            aligned.push([valA, valB]);
+          }
+        }
+
+        if (aligned.length < 5) {
+          hints.push({
+            recordTypeA: typeA,
+            recordTypeB: typeB,
+            correlation: 0,
+            strength: "none",
+            dataPointCount: aligned.length,
+          });
+          continue;
+        }
+
+        const n = aligned.length;
+        const sumX = aligned.reduce((s, [x]) => s + x, 0);
+        const sumY = aligned.reduce((s, [, y]) => s + y, 0);
+        const meanX = sumX / n;
+        const meanY = sumY / n;
+        const num = aligned.reduce((s, [x, y]) => s + (x - meanX) * (y - meanY), 0);
+        const denX = aligned.reduce((s, [x]) => s + (x - meanX) ** 2, 0);
+        const denY = aligned.reduce((s, [, y]) => s + (y - meanY) ** 2, 0);
+        const den = Math.sqrt(denX * denY);
+        if (den === 0) {
+          // No variance in one or both series — skip this pair
+          continue;
+        }
+        const r = num / den;
+        const absR = Math.abs(r);
+        const strength =
+          absR >= 0.7 ? "strong" : absR >= 0.4 ? "moderate" : absR >= 0.2 ? "weak" : "none";
+
+        hints.push({
+          recordTypeA: typeA,
+          recordTypeB: typeB,
+          correlation: r,
+          strength,
+          dataPointCount: n,
+        });
+      }
+    }
+
+    return {
+      hints: hints.filter((h) => h.strength !== "none"),
+      windowMs: toMs - fromMs,
+    };
+  },
+});
+
+const getCurrentPeriodBounds = (
+  period: "day" | "week" | "month",
+  nowMs: number
+): { periodStart: number; periodEnd: number } => {
+  const now = new Date(nowMs);
+  if (period === "day") {
+    const start = new Date(now);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
+    return { periodStart: start.getTime(), periodEnd: end.getTime() };
+  }
+  if (period === "week") {
+    const start = new Date(now);
+    const day = start.getUTCDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    start.setUTCDate(start.getUTCDate() + diff);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 7);
+    return { periodStart: start.getTime(), periodEnd: end.getTime() };
+  }
+  // month
+  const start = new Date(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const end = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+  return { periodStart: start.getTime(), periodEnd: end.getTime() };
+};

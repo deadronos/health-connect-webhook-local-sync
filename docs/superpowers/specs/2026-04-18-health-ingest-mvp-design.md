@@ -1,8 +1,10 @@
 # Health Connect Webhook Ingest MVP — Design
 
 **Date:** 2026-04-18
-**Status:** Approved
+**Status:** Deprecated — superseded by shipped Phase 2 features
 **Scope:** MVP — local ingest, SQLite-backed Convex, no Docker, no Postgres
+
+> **Note:** This document describes the initial MVP state (2026-04-18). Many details no longer reflect the current implementation. Key changes since this doc was written include: 17 Android record types (not 4), `in_progress`/`completed`/`error` delivery lifecycle, `dataClass`/`dataClassReason` tagging, `healthEventBuckets` and `cleanupRuns` tables, browser session auth, and analytics APIs. See the ADRs in `docs/architecture/` and `README.md` for current state.
 
 ---
 
@@ -47,7 +49,7 @@ health_ingest/
   README.md
 ```
 
-**Database:** Convex (Python client via `convexleyball`), schema managed by Convex migrations. No raw SQL migrations.
+**Database:** Convex self-hosted (Python client via `ConvexHttpClient` from the `convex` package), schema managed by Convex migrations. No raw SQL migrations.
 
 **Auth:** Static bearer token from `.env`.
 
@@ -67,7 +69,7 @@ health_ingest/
 6. Each canonical row stored to Convex `health_events` table
 7. Success response: `{"ok": true, "received_records": N, "stored_records": N, "delivery_id": "uuid"}`
 
-**Normalization — strict if/else per record type:**
+**Normalization — strict if/else per record type (flat format):**
 
 ```python
 if record_type == "steps":
@@ -82,9 +84,11 @@ else:
     → raise ValidationError("unsupported record type")
 ```
 
-Canonical model fields per event: `source`, `device_id`, `record_type`, `value`, `unit`, `start_time`, `end_time`, `captured_at`, `external_id`, `payload_hash`, `raw_delivery_id`
+The flat normalizer (above) supports 4 types. A separate `AndroidPayloadNormalizer` handles nested Android Health Connect payloads with 17 types: `steps`, `sleep`, `heart_rate`, `heart_rate_variability`, `distance`, `active_calories`, `total_calories`, `weight`, `height`, `oxygen_saturation`, `resting_heart_rate`, `exercise`, `nutrition`, `basal_metabolic_rate`, `body_fat`, `lean_body_mass`, `vo2_max`.
 
-**Dedupe:** `payload_hash` (SHA-256 of raw JSON bytes) per delivery. All raw deliveries kept. Normalized events deduped by fingerprint: `record_type + start_time + value + unit`.
+Canonical model fields per event: `record_type`, `value`, `unit`, `start_time`, `end_time`, `captured_at`, `device_id`, `external_id`, `payload_hash`, `raw_delivery_id`, `fingerprint`, optional `metadata`
+
+**Dedupe:** `payload_hash` (SHA-256 of raw JSON bytes) per delivery. All raw deliveries kept. Normalized events deduped by `fingerprint`: a SHA-256 over the full canonical form of the event (recordType, valueNumeric, unit, startTime, endTime, deviceId, externalId, metadata).
 
 ---
 
@@ -97,7 +101,7 @@ Canonical model fields per event: `source`, `device_id`, `record_type`, `value`,
 - `user_agent` (string, optional)
 - `payload_json` (string — raw JSON text)
 - `payload_hash` (string — SHA-256)
-- `status` (string — "stored" | "error")
+- `status` (string — "completed" | "in_progress" | "error"; "stored" is legacy pre-phase2)
 - `error_message` (string, optional)
 - `record_count` (int)
 
@@ -219,12 +223,14 @@ Auth required.
 
 ```env
 APP_ENV=development
-APP_HOST=127.0.0.1
+APP_HOST=0.0.0.0
 APP_PORT=8787
 INGEST_TOKEN=replace_me
-CONVEX_DEPLOYMENT_URL=https://your-project.convex.cloud
-CONVEX_ADMIN_KEY=replace_me
+CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210
+CONVEX_SELF_HOSTED_ADMIN_KEY=replace_me
 ENABLE_DEBUG_ROUTES=true
+ENABLE_ANALYTICS_ROUTES=true
+SESSION_SECRET=replace-me-session-secret
 MAX_BODY_BYTES=262144
 OPENCLAW_WEBHOOK_URL=
 OPENCLAW_WEBHOOK_TOKEN=

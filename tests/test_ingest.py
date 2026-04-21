@@ -1,10 +1,12 @@
 """End-to-end ingest tests with mocked Convex."""
+
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 @pytest.fixture
 def valid_record():
+    """A minimal valid generic-format webhook record for steps."""
     return {
         "record_type": "steps",
         "value": 1000,
@@ -46,6 +48,9 @@ async def test_valid_payload_accepted(valid_record, mock_convex_client):
         data = resp.json()
         assert data["ok"] is True
         assert data["received_records"] == 1
+        raw_delivery = mock_convex_client.ingest_delivery.call_args.kwargs["raw_delivery"]
+        assert raw_delivery["dataClass"] == "valid"
+        assert raw_delivery.get("dataClassReason") is None
 
 
 @pytest.mark.asyncio
@@ -128,3 +133,102 @@ async def test_multiple_records_accepted(valid_record, mock_convex_client):
         data = resp.json()
         assert data["ok"] is True
         assert data["received_records"] == 2
+
+
+@pytest.mark.asyncio
+async def test_header_marks_delivery_as_test_data(valid_record, mock_convex_client):
+    """X-OpenClaw-Test-Data: true should classify the delivery as test data."""
+    from httpx import ASGITransport, AsyncClient
+    from app.main import create_app
+
+    app = create_app()
+    payload = {"records": [valid_record]}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/ingest/health/v1",
+            json=payload,
+            headers={
+                "Authorization": "Bearer test-token",
+                "X-OpenClaw-Test-Data": "true",
+            },
+        )
+
+    assert resp.status_code == 200
+    raw_delivery = mock_convex_client.ingest_delivery.call_args.kwargs["raw_delivery"]
+    assert raw_delivery["dataClass"] == "test"
+    assert raw_delivery["dataClassReason"] == "header:x-openclaw-test-data"
+
+
+@pytest.mark.asyncio
+async def test_mock_sender_user_agent_marks_delivery_as_test_data(valid_record, mock_convex_client):
+    """health-ingest-mock-sender User-Agent should classify delivery as test data."""
+    from httpx import ASGITransport, AsyncClient
+    from app.main import create_app
+
+    app = create_app()
+    payload = {"records": [valid_record]}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/ingest/health/v1",
+            json=payload,
+            headers={
+                "Authorization": "Bearer test-token",
+                "User-Agent": "health-ingest-mock-sender/1.0",
+            },
+        )
+
+    assert resp.status_code == 200
+    raw_delivery = mock_convex_client.ingest_delivery.call_args.kwargs["raw_delivery"]
+    assert raw_delivery["dataClass"] == "test"
+    assert raw_delivery["dataClassReason"] == "user-agent:health-ingest-mock-sender"
+
+
+@pytest.mark.asyncio
+async def test_explicit_false_test_data_header_overrides_mock_sender_user_agent(valid_record, mock_convex_client):
+    """X-OpenClaw-Test-Data: false should override the mock sender User-Agent."""
+    from httpx import ASGITransport, AsyncClient
+    from app.main import create_app
+
+    app = create_app()
+    payload = {"records": [valid_record]}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/ingest/health/v1",
+            json=payload,
+            headers={
+                "Authorization": "Bearer test-token",
+                "User-Agent": "health-ingest-mock-sender/1.0",
+                "X-OpenClaw-Test-Data": "false",
+            },
+        )
+
+    assert resp.status_code == 200
+    raw_delivery = mock_convex_client.ingest_delivery.call_args.kwargs["raw_delivery"]
+    assert raw_delivery["dataClass"] == "valid"
+    assert raw_delivery.get("dataClassReason") is None
+
+
+@pytest.mark.asyncio
+async def test_invalid_test_data_header_rejected(valid_record, mock_convex_client):
+    """X-OpenClaw-Test-Data with an unrecognized value should return 422."""
+    from httpx import ASGITransport, AsyncClient
+    from app.main import create_app
+
+    app = create_app()
+    payload = {"records": [valid_record]}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/ingest/health/v1",
+            json=payload,
+            headers={
+                "Authorization": "Bearer test-token",
+                "X-OpenClaw-Test-Data": "sometimes",
+            },
+        )
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "X-OpenClaw-Test-Data must be true or false"

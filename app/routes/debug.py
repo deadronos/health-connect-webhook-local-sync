@@ -1,3 +1,5 @@
+"""Debug endpoints for inspecting recent deliveries and internal state."""
+
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query, Request, HTTPException
@@ -19,6 +21,22 @@ router = APIRouter(prefix="/debug", tags=["debug"])
 
 @router.get("/recent", response_model=DebugResponse)
 async def debug_recent(request: Request, limit: int = Query(default=10, ge=1, le=100)):
+    """Fetch the most recent raw deliveries for debugging purposes.
+
+    Requires a valid Bearer token for authentication. Disabled when
+    enable_debug_routes is False in settings.
+
+    Args:
+        request: The incoming HTTP request.
+        limit: Maximum number of deliveries to return (default 10, max 100).
+
+    Returns:
+        A DebugResponse containing a list of recent deliveries with their
+        status, record counts, and timestamps.
+
+    Raises:
+        HTTPException: 404 if debug routes are disabled, 401 if unauthorized.
+    """
     if not settings.enable_debug_routes:
         raise HTTPException(status_code=404, detail="Debug routes disabled")
 

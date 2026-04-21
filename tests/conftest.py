@@ -1,3 +1,9 @@
+"""Pytest configuration and shared fixtures for the test suite.
+
+Sets environment variables to isolate tests from local shell and .env configuration,
+then provides mock fixtures for the Convex HTTP client.
+"""
+
 import os
 from unittest.mock import patch, MagicMock
 
@@ -18,7 +24,11 @@ os.environ["SESSION_MAX_AGE_SECONDS"] = "3600"
 
 @pytest.fixture
 def mock_convex():
-    """Mock ConvexClient for unit tests."""
+    """Mock ConvexClient for unit tests.
+
+    Patches the httpx.Client used internally so that ConvexClient
+    operations succeed without a real backend.
+    """
     with patch("app.convex_client.httpx.Client") as mock_client:
         mock_instance = MagicMock()
         mock_instance.__enter__ = MagicMock(return_value=mock_instance)
@@ -34,7 +44,10 @@ def mock_convex():
 
 @pytest.fixture
 def mock_convex_with_health(mock_convex):
-    """Mock ConvexClient that also responds to health check."""
+    """Mock ConvexClient that also responds to health check.
+
+    Extends mock_convex so that /healthz returns a healthy response.
+    """
     mock_convex.post.return_value = MagicMock(
         status_code=200,
         json=lambda: {"value": {"ok": True, "db": "ok"}},

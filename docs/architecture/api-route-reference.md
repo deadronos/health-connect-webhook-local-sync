@@ -86,7 +86,7 @@ Common error patterns:
 - `401` for missing or invalid bearer/session auth on protected routes
 - `404` when a gated route is disabled by config
 - `413` when ingest payload size exceeds `MAX_BODY_BYTES`
-- `422` for invalid request structure, malformed JSON, invalid query params, or invalid time-window validation
+- `422` for invalid request structure, malformed JSON, invalid query params, invalid test-data header values, or invalid time-window validation
 - `500` for server-side persistence failures
 
 ## Route summary
@@ -128,12 +128,13 @@ Notes:
 
 ## `POST /ingest/health/v1`
 
-- **Purpose:** primary write endpoint for webhook deliveries. It authenticates the request, validates the payload, auto-detects flat vs Android shape, normalizes records, and uses one Convex mutation to store the raw delivery, dedupe events by fingerprint, and update rollup buckets.
+- **Purpose:** primary write endpoint for webhook deliveries. It authenticates the request, validates the payload, auto-detects flat vs Android shape, normalizes records, and uses a Convex write path that stores one raw delivery, dedupes events by fingerprint, and updates rollup buckets. Large normalized event sets are chunked internally across multiple event mutations to stay within Convex execution limits.
 - **Auth:** required.
 
 Headers:
 
 - `Authorization: Bearer <INGEST_TOKEN>`
+- optional `X-OpenClaw-Test-Data: true|false`
 - optional `User-Agent`
 
 Body rules:
@@ -234,8 +235,11 @@ Behavior notes:
 - Android format is auto-detected when `records` is absent and one or more Android-specific top-level keys are present.
 - `received_records` reports validated incoming record count.
 - `stored_records` reports how many non-duplicate normalized events were stored.
-- Raw deliveries are recorded through the atomic ingest mutation, even when some normalized events dedupe away.
+- Raw deliveries are recorded once per accepted request, even when large normalized event sets are chunked internally or some events dedupe away.
+- Buffered raw deliveries transition through `in_progress` and then `completed` or `error` on the same row so partial chunk failures remain visible in debug views.
 - Canonical events include `fingerprint`, optional `deviceId`, optional `externalId`, and optional `metadata`.
+- `X-OpenClaw-Test-Data: true` marks the stored raw delivery as `test`, making it eligible for scheduled Convex cleanup after the retention window.
+- The bundled `tools/mock_sender.py` uses a dedicated mock-sender user agent and sends the test-data header by default; `X-OpenClaw-Test-Data: false` overrides that classification.
 
 ## `GET /debug/recent`
 
@@ -258,11 +262,16 @@ Success example:
       "delivery_id": "delivery-123",
       "received_at": "2026-04-19T10:15:00Z",
       "record_count": 4,
-      "status": "stored"
+      "status": "completed"
     }
   ]
 }
 ```
+
+Behavior notes:
+
+- recent deliveries may report `in_progress`, `completed`, or `error`
+- older rows created before the lifecycle hardening may still appear as legacy `stored`
 
 ## `GET /login`
 

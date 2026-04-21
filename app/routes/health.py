@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+"""Health check endpoint for monitoring Convex database connectivity."""
+
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.convex_client import ConvexClient
@@ -14,13 +16,32 @@ router = APIRouter(tags=["health"])
 
 
 class HealthResponse(BaseModel):
+    """Response body for the health check endpoint.
+
+    Attributes:
+        ok: Whether the database connection is healthy.
+        db: Human-readable name or status of the connected database.
+    """
+
     ok: bool
     db: str
 
 
 @router.get("/healthz", response_model=HealthResponse)
 async def healthz():
-    health = client.check_db_health()
+    """Check the health of the Convex database connection.
+
+    Returns:
+        A HealthResponse indicating whether the database is reachable and operational.
+
+    Raises:
+        HTTPException: 500 if the database health check itself fails.
+    """
+    try:
+        health = client.check_db_health()
+    except Exception:
+        raise HTTPException(status_code=500, detail="Database health check failed")
+
     return HealthResponse(
         ok=health.get("ok", False),
         db=health.get("db", "unknown"),

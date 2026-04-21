@@ -1,11 +1,12 @@
-"""Tests for idempotent ingest behavior with a single Convex mutation."""
+"""Tests for idempotent ingest behavior through the Convex write path."""
 
 import pytest
 from unittest.mock import patch
 
 
 @pytest.mark.asyncio
-async def test_ingest_route_uses_single_delivery_mutation():
+async def test_ingest_route_uses_single_client_delivery_call():
+    """The ingest route should make exactly one ingest_delivery call regardless of duplicates."""
     from httpx import ASGITransport, AsyncClient
     from app.main import create_app
 

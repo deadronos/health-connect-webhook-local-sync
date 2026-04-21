@@ -30,7 +30,7 @@ Keep **Convex self-hosted** as the system of record for Phase 2 and add a lightw
 
 Specifically:
 
-- use a single ingest mutation to store the raw delivery, dedupe normalized events by `fingerprint`, insert only new events, and update rollup buckets
+- use a single logical Convex ingest write path: small deliveries may use one mutation, while large normalized event sets are chunked across multiple event mutations after the raw delivery is stored once
 - store analytics rollups in `healthEventBuckets`
 - support `hour` and `day` bucket sizes first
 - expose authenticated `/analytics/**` APIs from FastAPI
@@ -52,7 +52,7 @@ The dashboard needs fast-enough summary reads and simple time-series data. Hour/
 
 ### Idempotency and analytics fit the same write path
 
-Once events have a stable `fingerprint`, the same ingest mutation can both reject duplicates and update read-model buckets. That keeps the Phase-2 write path coherent.
+Once events have a stable `fingerprint`, the ingest path can reject duplicates and update read-model buckets whether the delivery fits in one mutation or needs chunking to stay within Convex execution limits. That keeps the Phase-2 write path coherent.
 
 ### Postgres should be triggered by real pressure, not anticipation
 
@@ -74,6 +74,7 @@ A Postgres migration makes sense later if the read model needs richer joins, mor
 - bucket updates can become hot writes under heavier concurrency
 - some analytics queries may still need event scans when bucket dimensions are not sufficient
 - the read model is intentionally modest and not a replacement for a full analytics database
+- very large historical deliveries are only logically atomic; once the raw delivery is stored, later event chunks rely on event-level idempotency rather than one all-or-nothing Convex execution, so the raw delivery now exposes an `in_progress` / `completed` / `error` lifecycle for visibility
 
 ---
 
@@ -91,3 +92,5 @@ Revisit PostgreSQL when one or more of these become true:
 ## Notes
 
 This ADR does not claim Convex is the final analytics destination. It records that **for Phase 2**, Convex rollup buckets are the smallest architecture that satisfies the current dashboard and analytics requirements while keeping the project easy to run locally.
+
+When test-tagged deliveries are cleaned up later, affected `hour` and `day` buckets are rebuilt from surviving `healthEvents` rather than adjusted by subtraction so `min`, `max`, and `latest*` values stay correct.

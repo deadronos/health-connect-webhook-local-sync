@@ -55,6 +55,7 @@ Use **Convex self-hosted with SQLite backing** as the default database for the i
 - No separate database migration tooling needed
 - Convex powers both the ingest storage and (optionally) OpenClaw integration in the future
 - Phase 2 can answer overview and time-series reads from Convex buckets without introducing a second database
+- Convex cron jobs can own small internal maintenance tasks such as scheduled cleanup of explicitly tagged test deliveries
 
 ### Negative
 
@@ -84,6 +85,10 @@ Python client uses the official `ConvexHttpClient` from the `convex` Python pack
 Convex function names are relative to the `convex.json` functions directory, not the full module path.
 
 Phase 2 adds a `healthEventBuckets` table for `hour` and `day` rollups so the built-in dashboard and `/analytics/**` APIs can stay Convex-first.
+
+Large historical ingests may be buffered into one raw-delivery write plus multiple event-chunk mutations so each Convex function stays under the platform's single-execution read budget while preserving the same external HTTP ingest contract. Buffered deliveries are written as `in_progress` first, then promoted to `completed` or `error` on the same raw-delivery row so partial chunk failures remain visible.
+
+Phase 2.5 also uses Convex cron jobs and internal mutations for scheduled cleanup of explicitly tagged test data while keeping bucket recomputation inside the same database layer.
 
 Revisit Postgres when one or more of these become true:
 

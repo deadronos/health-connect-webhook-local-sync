@@ -1,6 +1,10 @@
+"""Tests for Settings configuration loading from environment variables."""
+
 from app.config import Settings
 
+
 def test_settings_loads_from_env(tmp_path, monkeypatch):
+    """Settings should load values from environment variables when provided."""
     monkeypatch.setenv("INGEST_TOKEN", "test-token")
     monkeypatch.setenv("CONVEX_SELF_HOSTED_URL", "http://localhost:3210")
     monkeypatch.setenv("CONVEX_SELF_HOSTED_ADMIN_KEY", "test-key")
@@ -16,7 +20,9 @@ def test_settings_loads_from_env(tmp_path, monkeypatch):
     assert settings.session_cookie_name == "hc-session"
     assert settings.session_max_age_seconds == 7200
 
+
 def test_convex_site_url_property():
+    """convex_site_url should append /api/site to the convex_self_hosted_url."""
     settings = Settings()
     settings.ingest_token = "test"
     settings.convex_self_hosted_url = "http://127.0.0.1:3210"
@@ -25,6 +31,7 @@ def test_convex_site_url_property():
 
 
 def test_session_https_only_property_changes_with_env():
+    """session_https_only should be False in development/test and True in production."""
     settings = Settings()
     settings.app_env = "development"
     assert settings.session_https_only is False

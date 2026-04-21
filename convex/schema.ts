@@ -8,10 +8,19 @@ export default defineSchema({
     userAgent: v.optional(v.string()),
     payloadJson: v.string(),
     payloadHash: v.string(),
-    status: v.union(v.literal("stored"), v.literal("error")),
+    status: v.union(
+      v.literal("stored"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("error")
+    ),
     errorMessage: v.optional(v.string()),
     recordCount: v.number(),
-  }).index("by_payload_hash", ["payloadHash"]),
+    dataClass: v.optional(v.union(v.literal("valid"), v.literal("test"))),
+    dataClassReason: v.optional(v.string()),
+  })
+    .index("by_payload_hash", ["payloadHash"])
+    .index("by_data_class_and_received_at", ["dataClass", "receivedAt"]),
 
   healthEvents: defineTable({
     rawDeliveryId: v.string(),
@@ -71,4 +80,28 @@ export default defineSchema({
     success: v.boolean(),
     errorMessage: v.optional(v.string()),
   }).index("by_delivery", ["rawDeliveryId"]),
+
+  cleanupRuns: defineTable({
+    startedAt: v.number(),
+    finishedAt: v.number(),
+    mode: v.union(v.literal("dry_run"), v.literal("delete")),
+    retentionMs: v.number(),
+    cutoffReceivedAt: v.number(),
+    candidateDeliveryCount: v.number(),
+    candidateEventCount: v.number(),
+    deletedDeliveryCount: v.number(),
+    deletedEventCount: v.number(),
+    deletedForwardAttemptCount: v.number(),
+    rebuiltBucketCount: v.number(),
+  }).index("by_started_at", ["startedAt"]),
+
+  healthGoals: defineTable({
+    userId: v.string(),
+    recordType: v.string(),
+    targetValue: v.number(),
+    targetUnit: v.string(),
+    period: v.union(v.literal("day"), v.literal("week"), v.literal("month")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user_and_record", ["userId", "recordType"]),
 });
