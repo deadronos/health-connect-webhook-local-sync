@@ -1,6 +1,4 @@
-"""Bearer token and session-based authentication for the Health Connect webhook service."""
-
-import hmac
+from secrets import compare_digest
 
 from fastapi import HTTPException, Request
 
@@ -24,25 +22,12 @@ class BearerAuth:
         self.token = token
 
     def verify_token(self, token: str | None) -> bool:
-        """Verify that the provided token matches the configured token.
-
-        Uses constant-time comparison to prevent timing attacks.
-
-        Args:
-            token: The token string to verify, or None.
-
-        Returns:
-            True if the token is valid.
-
-        Raises:
-            HTTPException: If the token is missing or does not match.
-        """
-        if not token:
+        if token is None or token == "":
             raise HTTPException(status_code=401, detail="Missing token")
 
         # Use constant-time comparison to prevent timing attacks where an attacker
         # could guess the token byte-by-byte based on how long the comparison takes.
-        if not hmac.compare_digest(token, self.token):
+        if not compare_digest(token, self.token):
             raise HTTPException(status_code=401, detail="Invalid token")
         return True
 

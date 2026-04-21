@@ -1,13 +1,6 @@
 # One Entry per Line
 
-2026-04-19 Buffer large Convex ingests into chunked event mutations while keeping one raw delivery row per request
-2026-04-19 Track buffered raw deliveries as in_progress, completed, or error so partial chunk failures are visible in recent-delivery debug views
-2026-04-19 Make dashboard metric chips, summary cards, and rail controls switch the focused metric and section dynamically
-2026-04-19 Refresh the built-in dashboard with a Figma-inspired dark multi-panel analytics layout
-2026-04-19 Add daily Convex cleanup for explicitly tagged test deliveries and rebuild affected analytics buckets
-2026-04-19 Mark mock sender fixture ingests as test data by default and run official Convex cleanup tests from scripts/test.sh
 2026-04-19 Reinforce timing attack protection in token verification using constant-time `hmac.compare_digest`
-2026-04-19 Add unit tests for /healthz endpoint covering success, unhealthy, and error scenarios
 2026-04-19 Add /login and signed browser sessions for /dashboard and /analytics/** while keeping ingest and debug routes bearer-only
 2026-04-19 Add phase-2 analytics/dashboard implementation plan and repo roadmap
 2026-04-19 Expand canonical health events with device IDs, fingerprints, and optional metadata for analytics
@@ -23,4 +16,3 @@
 2026-04-18 Add ADR records for database (Convex), normalizer (strict if/else), and auth (bearer token) decisions
 2026-04-18 Add comprehensive README with architecture diagram, API reference, quick start guide, and project structure
 2026-04-18 Add AGENTS.md with doc/code sync rules and changelog policy
-2025-05-15 Implement streaming for CSV export in GET /analytics/export.csv
