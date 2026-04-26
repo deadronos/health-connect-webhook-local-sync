@@ -325,3 +325,45 @@ def test_ingest_delivery_marks_buffered_delivery_as_error_when_a_chunk_fails():
             },
         ),
     ]
+
+import pytest
+from convex import ConvexError
+
+def test_get_analytics_overview_success():
+    """get_analytics_overview successfully fetches and returns data."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, 'query', return_value=[{"metric": "value"}]) as mock_query:
+        result = client.get_analytics_overview(
+            from_ms=1000,
+            to_ms=2000,
+            record_types=["type1"],
+            device_id="dev1",
+        )
+        assert result == [{"metric": "value"}]
+        mock_query.assert_called_once()
+        call_args = mock_query.call_args
+        assert call_args[0][0] == "analytics.js:getOverview"
+        assert call_args[0][1] == {
+            "fromMs": 1000,
+            "toMs": 2000,
+            "recordTypes": ["type1"],
+            "deviceId": "dev1"
+        }
+
+def test_get_analytics_overview_empty_result():
+    """get_analytics_overview returns empty list if result is None or not a list."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, 'query', return_value=None):
+        result = client.get_analytics_overview()
+        assert result == []
+
+def test_get_analytics_overview_handles_convex_error():
+    """get_analytics_overview raises Exception on ConvexError."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, 'query', side_effect=ConvexError("test error", {"message": "test error"})):
+        with pytest.raises(Exception) as excinfo:
+            client.get_analytics_overview()
+        assert "Convex error: test error" in str(excinfo.value)
