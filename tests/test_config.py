@@ -21,17 +21,20 @@ def test_settings_loads_from_env(tmp_path, monkeypatch):
     assert settings.session_max_age_seconds == 7200
 
 
-def test_convex_site_url_property():
+def test_convex_site_url_property(monkeypatch):
     """convex_site_url should append /api/site to the convex_self_hosted_url."""
+    monkeypatch.setenv("INGEST_TOKEN", "test")
+    monkeypatch.setenv("SESSION_SECRET", "secret")
     settings = Settings()
-    settings.ingest_token = "test"
     settings.convex_self_hosted_url = "http://127.0.0.1:3210"
     settings.convex_self_hosted_admin_key = "key"
     assert settings.convex_site_url == "http://127.0.0.1:3210/api/site"
 
 
-def test_session_https_only_property_changes_with_env():
+def test_session_https_only_property_changes_with_env(monkeypatch):
     """session_https_only should be False in development/test and True in production."""
+    monkeypatch.setenv("INGEST_TOKEN", "test")
+    monkeypatch.setenv("SESSION_SECRET", "secret")
     settings = Settings()
     settings.app_env = "development"
     assert settings.session_https_only is False
