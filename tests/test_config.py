@@ -21,6 +21,20 @@ def test_settings_loads_from_env(tmp_path, monkeypatch):
     assert settings.session_max_age_seconds == 7200
 
 
+def test_app_host_default_is_all_interfaces(tmp_path, monkeypatch):
+    """app_host should default to 0.0.0.0 so the dev server binds all interfaces.
+
+    This allows sandboxed agents and other local clients to reach :8787.
+    """
+    # Write a minimal .env so Settings doesn't fall back to .env.example
+    env_file = tmp_path / ".env"
+    env_file.write_text("INGEST_TOKEN=test\nCONVEX_SELF_HOSTED_ADMIN_KEY=key\n")
+    monkeypatch.chdir(tmp_path)
+
+    settings = Settings()
+    assert settings.app_host == "0.0.0.0"
+
+
 def test_convex_site_url_property():
     """convex_site_url should append /api/site to the convex_self_hosted_url."""
     settings = Settings()

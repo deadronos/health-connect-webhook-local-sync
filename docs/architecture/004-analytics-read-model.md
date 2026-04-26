@@ -72,9 +72,10 @@ A Postgres migration makes sense later if the read model needs richer joins, mor
 ### Negative
 
 - bucket updates can become hot writes under heavier concurrency
-- some analytics queries may still need event scans when bucket dimensions are not sufficient
+- some analytics queries may still need event scans when bucket dimensions are not sufficient; the current implementation does full-table scans for `getAnalyticsOverview`, `listAnalyticsEvents`, and `getPeriodSummaries` — this works for local development and moderate event counts but will need index-based filtering before reaching production scale
 - the read model is intentionally modest and not a replacement for a full analytics database
 - very large historical deliveries are only logically atomic; once the raw delivery is stored, later event chunks rely on event-level idempotency rather than one all-or-nothing Convex execution, so the raw delivery now exposes an `in_progress` / `completed` / `error` lifecycle for visibility
+- `getGoalProgress` falls back to a full scan when `recordType` is omitted; the `healthGoals` table has a compound index but the query path doesn't leverage it in that case — acceptable for local dev, worth addressing if goal queries grow
 
 ---
 
