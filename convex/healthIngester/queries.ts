@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { queryGeneric } from "convex/server";
+import { getCurrentPeriodBounds, getPeriodStart } from "./_shared";
 
 const recordTypeValidator = v.union(
   v.literal("steps"),
@@ -404,25 +405,6 @@ export const detectAnomalies = queryGeneric({
   },
 });
 
-const getPeriodStart = (timestamp: number, period: "day" | "week" | "month"): number => {
-  const date = new Date(timestamp);
-  if (period === "day") {
-    date.setUTCHours(0, 0, 0, 0);
-    return date.getTime();
-  }
-  if (period === "week") {
-    const day = date.getUTCDay();
-    const diff = day === 0 ? -6 : 1 - day; // Monday
-    date.setUTCDate(date.getUTCDate() + diff);
-    date.setUTCHours(0, 0, 0, 0);
-    return date.getTime();
-  }
-  // month
-  date.setUTCDate(1);
-  date.setUTCHours(0, 0, 0, 0);
-  return date.getTime();
-};
-
 export const getPeriodSummaries = queryGeneric({
   args: {
     recordTypes: v.array(v.string()),
@@ -636,30 +618,3 @@ export const getCorrelationHints = queryGeneric({
   },
 });
 
-const getCurrentPeriodBounds = (
-  period: "day" | "week" | "month",
-  nowMs: number
-): { periodStart: number; periodEnd: number } => {
-  const now = new Date(nowMs);
-  if (period === "day") {
-    const start = new Date(now);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
-    return { periodStart: start.getTime(), periodEnd: end.getTime() };
-  }
-  if (period === "week") {
-    const start = new Date(now);
-    const day = start.getUTCDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    start.setUTCDate(start.getUTCDate() + diff);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 7);
-    return { periodStart: start.getTime(), periodEnd: end.getTime() };
-  }
-  // month
-  const start = new Date(now.getUTCFullYear(), now.getUTCMonth(), 1);
-  const end = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
-  return { periodStart: start.getTime(), periodEnd: end.getTime() };
-};
