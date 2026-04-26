@@ -325,3 +325,38 @@ def test_ingest_delivery_marks_buffered_delivery_as_error_when_a_chunk_fails():
             },
         ),
     ]
+
+def test_list_recent_deliveries_success():
+    """list_recent_deliveries delegates to queries.js:listRecentDeliveries and passes limit."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    expected_result = [{"id": "del-1"}, {"id": "del-2"}]
+    with patch.object(client._client, 'query', return_value=expected_result) as mock_query:
+        result = client.list_recent_deliveries(limit=2)
+        assert result == expected_result
+        mock_query.assert_called_once_with("queries.js:listRecentDeliveries", {"limit": 2})
+
+def test_list_recent_deliveries_not_list():
+    """list_recent_deliveries returns empty list if the result is not a list."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, 'query', return_value="not-a-list") as mock_query:
+        result = client.list_recent_deliveries(limit=5)
+        assert result == []
+        mock_query.assert_called_once_with("queries.js:listRecentDeliveries", {"limit": 5})
+
+def test_list_recent_deliveries_convex_error():
+    """list_recent_deliveries raises Exception when ConvexError occurs."""
+    import pytest
+    from app.convex_client import ConvexClient
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    # Create a dummy exception to pretend it's a ConvexError
+    class DummyError(Exception):
+        pass
+
+    import app.convex_client
+    with patch.object(app.convex_client, 'ConvexError', DummyError):
+        with patch.object(client._client, 'query', side_effect=DummyError("test error")):
+            with pytest.raises(Exception, match="Convex error: test error"):
+                client.list_recent_deliveries()
