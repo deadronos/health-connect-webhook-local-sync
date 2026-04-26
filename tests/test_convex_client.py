@@ -325,3 +325,53 @@ def test_ingest_delivery_marks_buffered_delivery_as_error_when_a_chunk_fails():
             },
         ),
     ]
+
+def test_get_analytics_overview_with_args():
+    """get_analytics_overview forwards arguments correctly to Convex."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    mock_result = [{"recordType": "steps", "value": 100}]
+    with patch.object(client._client, "query", return_value=mock_result) as mock_query:
+        result = client.get_analytics_overview(
+            from_ms=1710800000000,
+            to_ms=1710803600000,
+            record_types=["steps", "heart_rate"],
+            device_id="device-123"
+        )
+
+        assert result == mock_result
+        mock_query.assert_called_once_with(
+            "analytics.js:getOverview",
+            {
+                "fromMs": 1710800000000,
+                "toMs": 1710803600000,
+                "recordTypes": ["steps", "heart_rate"],
+                "deviceId": "device-123",
+            }
+        )
+
+def test_get_analytics_overview_no_args():
+    """get_analytics_overview strips None values when no arguments are provided."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    mock_result = [{"recordType": "steps", "value": 100}]
+    with patch.object(client._client, "query", return_value=mock_result) as mock_query:
+        result = client.get_analytics_overview()
+
+        assert result == mock_result
+        mock_query.assert_called_once_with("analytics.js:getOverview", {})
+
+def test_get_analytics_overview_exception():
+    """get_analytics_overview wraps ConvexError in a standard Exception."""
+    from convex import ConvexError
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, "query", side_effect=ConvexError("query failed", None)) as mock_query:
+        try:
+            client.get_analytics_overview()
+        except Exception as exc:
+            assert str(exc) == "Convex error: query failed"
+        else:
+            assert False, "get_analytics_overview should re-raise the ConvexError as an Exception"
+
+        mock_query.assert_called_once_with("analytics.js:getOverview", {})

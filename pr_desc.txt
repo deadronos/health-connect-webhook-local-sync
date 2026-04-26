@@ -1,0 +1,11 @@
+🎯 **What:**
+Added comprehensive unit tests for `ConvexClient.get_analytics_overview` inside `tests/test_convex_client.py`. Fixed the target query name to properly route to `"analytics.js:getOverview"` as specified in the issue.
+
+📊 **Coverage:**
+The added tests cover the following scenarios:
+1. `test_get_analytics_overview_with_args`: Verifies that arguments are successfully forwarded to Convex with the right variable names structure.
+2. `test_get_analytics_overview_no_args`: Verifies that when no arguments are provided, `None` values are stripped completely (testing the `_conv_to_json` internal mapping implicitly), passing an empty dictionary.
+3. `test_get_analytics_overview_exception`: Verifies that `ConvexError` from underlying implementations correctly bubble up and wrap inside a generic Python `Exception` with appropriate error text.
+
+✨ **Result:**
+The `get_analytics_overview` method's behaviors and its argument forwarding logic are now correctly covered. The tests pass locally without issue.

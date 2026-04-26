@@ -353,7 +353,7 @@ class ConvexClient:
             Exception: If the Convex query fails.
         """
         try:
-            result = self._client.query("queries.js:getAnalyticsOverview", self._conv_to_json({
+            result = self._client.query("analytics.js:getOverview", self._conv_to_json({
                 "fromMs": from_ms,
                 "toMs": to_ms,
                 "recordTypes": record_types,
