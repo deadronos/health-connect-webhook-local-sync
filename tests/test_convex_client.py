@@ -325,3 +325,56 @@ def test_ingest_delivery_marks_buffered_delivery_as_error_when_a_chunk_fails():
             },
         ),
     ]
+
+from convex import ConvexError
+
+def test_get_analytics_overview_success():
+    """get_analytics_overview calls queries.js:getAnalyticsOverview and returns a list."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    overview_data = [{"recordType": "steps", "value": 100}]
+
+    with patch.object(client._client, "query", return_value=overview_data) as mock_query:
+        result = client.get_analytics_overview(
+            from_ms=1600000000000,
+            to_ms=1600001000000,
+            record_types=["steps"],
+            device_id="device123"
+        )
+        assert result == overview_data
+
+    mock_query.assert_called_once_with(
+        "queries.js:getAnalyticsOverview",
+        {
+            "fromMs": 1600000000000,
+            "toMs": 1600001000000,
+            "recordTypes": ["steps"],
+            "deviceId": "device123"
+        }
+    )
+
+def test_get_analytics_overview_removes_none_args():
+    """get_analytics_overview strips None values from query args."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, "query", return_value=[]) as mock_query:
+        result = client.get_analytics_overview()
+        assert result == []
+
+    mock_query.assert_called_once_with(
+        "queries.js:getAnalyticsOverview",
+        {}
+    )
+
+
+def test_get_analytics_overview_handles_error():
+    """get_analytics_overview catches ConvexError and re-raises as Exception."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, "query", side_effect=ConvexError("query failed")):
+        try:
+            client.get_analytics_overview()
+        except Exception as e:
+            assert str(e) == "Convex error: query failed"
+        else:
+            assert False, "Should have raised an Exception"
