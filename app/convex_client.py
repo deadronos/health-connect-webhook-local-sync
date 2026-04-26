@@ -465,7 +465,7 @@ class ConvexClient:
             Exception: If the Convex query fails.
         """
         try:
-            result = self._client.query("queries.js:getTrend", self._conv_to_json({
+            result = self._client.query("analytics.js:getTrend", self._conv_to_json({
                 "recordType": record_type,
                 "fromMs": from_ms,
                 "toMs": to_ms,

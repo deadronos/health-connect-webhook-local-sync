@@ -325,3 +325,67 @@ def test_ingest_delivery_marks_buffered_delivery_as_error_when_a_chunk_fails():
             },
         ),
     ]
+
+
+def test_get_trend_success():
+    """get_trend should pass arguments to queries.js:getTrend and return the dictionary."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+    mock_response = {
+        "direction": "up",
+        "percentChange": 10.0,
+        "currentValue": 110,
+        "priorValue": 100
+    }
+
+    with patch.object(client._client, "query", return_value=mock_response) as mock_query:
+        result = client.get_trend("steps", from_ms=1000, to_ms=2000)
+
+    assert result == mock_response
+    mock_query.assert_called_once()
+    assert mock_query.call_args[0][0] == "analytics.js:getTrend"
+    assert mock_query.call_args[0][1] == {
+        "recordType": "steps",
+        "fromMs": 1000,
+        "toMs": 2000,
+    }
+
+
+def test_get_trend_missing_optional():
+    """get_trend should handle missing optional from_ms and to_ms arguments."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+    mock_response = {}
+
+    with patch.object(client._client, "query", return_value=mock_response) as mock_query:
+        result = client.get_trend("steps")
+
+    assert result == mock_response
+    mock_query.assert_called_once()
+    assert mock_query.call_args[0][0] == "analytics.js:getTrend"
+    assert mock_query.call_args[0][1] == {
+        "recordType": "steps",
+        "fromMs": None,
+        "toMs": None,
+    }
+
+
+def test_get_trend_non_dict():
+    """get_trend should return an empty dict if the query returns a non-dict."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, "query", return_value=[]) as mock_query:
+        result = client.get_trend("steps")
+
+    assert result == {}
+    mock_query.assert_called_once()
+
+
+def test_get_trend_exception():
+    """get_trend should wrap ConvexError in a standard Exception."""
+    from convex import ConvexError
+    import pytest
+
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, "query", side_effect=ConvexError("test error")):
+        with pytest.raises(Exception, match="Convex error: test error"):
+            client.get_trend("steps")
