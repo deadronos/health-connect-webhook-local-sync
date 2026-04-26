@@ -61,3 +61,19 @@ def test_normalize_weight():
     assert events[0]["recordType"] == "weight"
     assert events[0]["valueNumeric"] == 70.5
     assert events[0]["unit"] == "kg"
+
+
+def test_parse_instant():
+    """AndroidPayloadNormalizer._parse_instant should handle valid, invalid, and empty strings."""
+    normalizer = AndroidPayloadNormalizer({}, "hash", "del")
+
+    # Valid ISO-8601
+    assert normalizer._parse_instant("2024-01-01T00:00:00Z") == 1704067200000
+    assert normalizer._parse_instant("2024-01-01T00:00:00+00:00") == 1704067200000
+
+    # Invalid timestamp
+    assert normalizer._parse_instant("invalid-date") == 0
+
+    # Empty timestamp
+    assert normalizer._parse_instant("") == 0
+    assert normalizer._parse_instant(None) == 0
