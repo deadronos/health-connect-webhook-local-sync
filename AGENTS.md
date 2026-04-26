@@ -75,6 +75,10 @@ You do not need an ADR for:
 3. **Code matches docs** — If the change contradicts a doc, either fix the code or update the doc
 4. **Tests pass** — Run `pytest tests/` and confirm no new failures
 
+   - Use the repo virtual environment first: `source .venv/bin/activate`
+   - If `pytest` is not on `PATH`, run it explicitly as `.venv/bin/pytest`
+   - VS Code test discovery should point at the same `.venv` interpreter
+
 **If any item fails, the PR is not ready to merge. Fix first, then merge.**
 
 ## Project Structure Overview

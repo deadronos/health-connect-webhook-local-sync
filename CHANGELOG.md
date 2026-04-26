@@ -1,5 +1,6 @@
 # One Entry per Line
 
+2026-04-26 Add AGENTS.md note to activate `.venv` before running pytest or VS Code test discovery
 2026-04-26 Add `getCurrentPeriodBounds` and `getPeriodStart` shared utilities, deduplicating identical code in mutations.ts and queries.ts
 2026-04-26 Update ADR-004 to document that analytics queries perform full event scans; note `getGoalProgress` full-scan fallback when recordType is omitted
 2026-04-26 Change `app_host` default from `127.0.0.1` to `0.0.0.0` to align with README quick-start and allow sandboxed agent access to `:8787`; add regression test
