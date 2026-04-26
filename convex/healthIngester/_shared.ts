@@ -46,9 +46,11 @@ export function getCurrentPeriodBounds(
     end.setUTCDate(end.getUTCDate() + 7);
     return { periodStart: start.getTime(), periodEnd: end.getTime() };
   }
-  // month
-  const start = new Date(now.getUTCFullYear(), now.getUTCMonth(), 1);
-  const end = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+  // month — use UTC setters to avoid host local-timezone offset
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const start = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(year, month + 1, 1, 0, 0, 0, 0));
   return { periodStart: start.getTime(), periodEnd: end.getTime() };
 }
 
@@ -75,7 +77,8 @@ export function getPeriodStart(timestampMs: number, period: Period): number {
     date.setUTCHours(0, 0, 0, 0);
     return date.getTime();
   }
-  // month
+  // month — use UTC setters so the start-of-month is always 00:00 UTC,
+  // regardless of the host machine's local timezone
   date.setUTCDate(1);
   date.setUTCHours(0, 0, 0, 0);
   return date.getTime();
