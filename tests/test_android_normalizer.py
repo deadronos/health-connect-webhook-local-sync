@@ -77,3 +77,15 @@ def test_parse_instant():
     # Empty timestamp
     assert normalizer._parse_instant("") == 0
     assert normalizer._parse_instant(None) == 0
+
+def test_malformed_record_returns_none():
+    """AndroidPayloadNormalizer should skip records missing required keys."""
+    payload = {
+        "steps": [
+            {"count": 8421, "start_time": "2024-01-01T00:00:00Z"},  # Missing end_time
+            {"end_time": "2024-01-01T01:00:00Z", "start_time": "2024-01-01T00:00:00Z"}, # Missing count
+        ]
+    }
+    normalizer = AndroidPayloadNormalizer(payload, "hash123", "delivery456")
+    events = normalizer.normalize()
+    assert len(events) == 0
