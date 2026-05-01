@@ -28,24 +28,27 @@ def test_app_host_default_is_all_interfaces(tmp_path, monkeypatch):
     """
     # Write a minimal .env so Settings doesn't fall back to .env.example
     env_file = tmp_path / ".env"
-    env_file.write_text("INGEST_TOKEN=test\nCONVEX_SELF_HOSTED_ADMIN_KEY=key\n")
+    env_file.write_text("INGEST_TOKEN=test\nSESSION_SECRET=secret\nCONVEX_SELF_HOSTED_ADMIN_KEY=key\n")
     monkeypatch.chdir(tmp_path)
 
     settings = Settings()
     assert settings.app_host == "0.0.0.0"
 
 
-def test_convex_site_url_property():
+def test_convex_site_url_property(monkeypatch):
     """convex_site_url should append /api/site to the convex_self_hosted_url."""
+    monkeypatch.setenv("INGEST_TOKEN", "test")
+    monkeypatch.setenv("SESSION_SECRET", "secret")
     settings = Settings()
-    settings.ingest_token = "test"
     settings.convex_self_hosted_url = "http://127.0.0.1:3210"
     settings.convex_self_hosted_admin_key = "key"
     assert settings.convex_site_url == "http://127.0.0.1:3210/api/site"
 
 
-def test_session_https_only_property_changes_with_env():
+def test_session_https_only_property_changes_with_env(monkeypatch):
     """session_https_only should be False in development/test and True in production."""
+    monkeypatch.setenv("INGEST_TOKEN", "test")
+    monkeypatch.setenv("SESSION_SECRET", "secret")
     settings = Settings()
     settings.app_env = "development"
     assert settings.session_https_only is False

@@ -28,12 +28,12 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8787
-    ingest_token: str = "replace_me"
+    ingest_token: str
     convex_self_hosted_url: str = "http://127.0.0.1:3210"
     convex_self_hosted_admin_key: str = ""
     enable_debug_routes: bool = True
     enable_analytics_routes: bool = True
-    session_secret: str = "replace-me-session-secret"
+    session_secret: str
     session_cookie_name: str = "hc_dashboard_session"
     session_max_age_seconds: int = 86400
     max_body_bytes: int = 262144

@@ -5,6 +5,7 @@
 2026-04-26 Update ADR-004 to document that analytics queries perform full event scans; note `getGoalProgress` full-scan fallback when recordType is omitted
 2026-04-26 Change `app_host` default from `127.0.0.1` to `0.0.0.0` to align with README quick-start and allow sandboxed agent access to `:8787`; add regression test
 2026-04-26 Add regression test for `session_https_only` property (already existed in test_config.py, move `test_convex_site_url_property` up so `test_app_host_default_is_all_interfaces` comes first)
+2026-04-26 Remove hardcoded session secret and ingest token defaults for improved security
 2026-04-25 Add correlation analysis endpoint `GET /analytics/correlation` with Pearson correlation between pairs of record types, powered by `getCorrelationHints` Convex query
 2026-04-25 Add health goals feature: `setHealthGoal` mutation to create/update targets and `GET /analytics/goals` endpoint to fetch current progress against targets via `getGoalProgress` Convex query
 2026-04-25 Add `getPeriodSummaries` Convex query for weekly/monthly aggregations and `GET /analytics/period-summaries` endpoint
