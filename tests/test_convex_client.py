@@ -326,6 +326,7 @@ def test_ingest_delivery_marks_buffered_delivery_as_error_when_a_chunk_fails():
         ),
     ]
 
+<<<<<<< HEAD
 import pytest
 from convex import ConvexError
 
@@ -367,3 +368,34 @@ def test_get_analytics_overview_handles_convex_error():
         with pytest.raises(Exception) as excinfo:
             client.get_analytics_overview()
         assert "Convex error: test error" in str(excinfo.value)
+=======
+def test_check_db_health_success():
+    """check_db_health returns the dict response on success."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+    with patch.object(client._client, 'query', return_value={"ok": True, "db": "healthy"}) as mock_query:
+        result = client.check_db_health()
+        assert result == {"ok": True, "db": "healthy"}
+        mock_query.assert_called_once_with("queries.js:checkDbHealth", {})
+
+
+def test_check_db_health_non_dict_response():
+    """check_db_health returns an empty dict if the response is not a dict."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+    with patch.object(client._client, 'query', return_value=["not", "a", "dict"]) as mock_query:
+        result = client.check_db_health()
+        assert result == {}
+        mock_query.assert_called_once_with("queries.js:checkDbHealth", {})
+
+
+def test_check_db_health_convex_error():
+    """check_db_health raises an Exception if ConvexError occurs."""
+    from convex import ConvexError
+    import pytest
+
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+    with patch.object(client._client, 'query', side_effect=ConvexError("db is down", "db is down")) as mock_query:
+        with pytest.raises(Exception) as exc_info:
+            client.check_db_health()
+        assert "Convex error: db is down" in str(exc_info.value)
+        mock_query.assert_called_once_with("queries.js:checkDbHealth", {})
+>>>>>>> pr-28
