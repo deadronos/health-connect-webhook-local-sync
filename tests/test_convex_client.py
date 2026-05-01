@@ -398,3 +398,53 @@ def test_check_db_health_convex_error():
             client.check_db_health()
         assert "Convex error: db is down" in str(exc_info.value)
         mock_query.assert_called_once_with("queries.js:checkDbHealth", {})
+def test_list_recent_deliveries_success():
+    """list_recent_deliveries delegates to queries.js:listRecentDeliveries and returns the list."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+    fake_deliveries = [{"id": "del-1"}, {"id": "del-2"}]
+
+    with patch.object(client._client, 'query', return_value=fake_deliveries) as mock_query:
+        result = client.list_recent_deliveries()
+        assert result == fake_deliveries
+        mock_query.assert_called_once_with(
+            "queries.js:listRecentDeliveries",
+            {"limit": 10}
+        )
+
+def test_list_recent_deliveries_custom_limit():
+    """list_recent_deliveries correctly passes a custom limit."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+    fake_deliveries = [{"id": "del-1"}]
+
+    with patch.object(client._client, 'query', return_value=fake_deliveries) as mock_query:
+        result = client.list_recent_deliveries(limit=5)
+        assert result == fake_deliveries
+        mock_query.assert_called_once_with(
+            "queries.js:listRecentDeliveries",
+            {"limit": 5}
+        )
+
+def test_list_recent_deliveries_non_list_result():
+    """list_recent_deliveries returns an empty list if the result is not a list."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, 'query', return_value=None) as mock_query:
+        result = client.list_recent_deliveries()
+        assert result == []
+        mock_query.assert_called_once_with(
+            "queries.js:listRecentDeliveries",
+            {"limit": 10}
+        )
+
+def test_list_recent_deliveries_convex_error():
+    """list_recent_deliveries raises an Exception wrapping a ConvexError on query failure."""
+    from convex import ConvexError
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, 'query', side_effect=ConvexError("query failed", data=None)) as mock_query:
+        try:
+            client.list_recent_deliveries()
+        except Exception as exc:
+            assert "Convex error: query failed" in str(exc)
+        else:
+            assert False, "Should have raised an Exception"
