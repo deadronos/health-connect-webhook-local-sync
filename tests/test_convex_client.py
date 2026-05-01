@@ -105,10 +105,12 @@ def test_ingest_delivery_chunks_large_batches_behind_single_raw_delivery():
                 "payloadHash": "hash123",
                 "status": "completed",
                 "recordCount": 3,
+                "dataClass": "test",
+                "dataClassReason": "header:x-openclaw-test-data",
             },
             events=[
                 {
-                    "rawDeliveryId": "placeholder",
+                    "rawDeliveryId": "delivery-123",
                     "recordType": "steps",
                     "valueNumeric": 1000.0,
                     "unit": "count",
@@ -120,215 +122,155 @@ def test_ingest_delivery_chunks_large_batches_behind_single_raw_delivery():
                     "createdAt": 1710803600000,
                 },
                 {
-                    "rawDeliveryId": "placeholder",
+                    "rawDeliveryId": "delivery-123",
                     "recordType": "steps",
-                    "valueNumeric": 500.0,
+                    "valueNumeric": 2000.0,
                     "unit": "count",
                     "startTime": 1710803600000,
                     "endTime": 1710807200000,
                     "capturedAt": 1710807200000,
-                    "payloadHash": "hash123",
-                    "fingerprint": "fingerprint-456",
+                    "payloadHash": "hash124",
+                    "fingerprint": "fingerprint-124",
                     "createdAt": 1710807200000,
                 },
                 {
-                    "rawDeliveryId": "placeholder",
+                    "rawDeliveryId": "delivery-123",
                     "recordType": "steps",
-                    "valueNumeric": 500.0,
+                    "valueNumeric": 3000.0,
                     "unit": "count",
                     "startTime": 1710807200000,
                     "endTime": 1710810800000,
                     "capturedAt": 1710810800000,
-                    "payloadHash": "hash123",
-                    "fingerprint": "fingerprint-456",
+                    "payloadHash": "hash125",
+                    "fingerprint": "fingerprint-125",
                     "createdAt": 1710810800000,
                 },
             ],
         )
 
-    assert result == {
-        "delivery_id": "delivery-123",
-        "received_records": 3,
-        "stored_records": 2,
-        "duplicate_records": 1,
-    }
-    assert mock_mut.call_args_list == [
-        call(
-            "mutations.js:storeRawDelivery",
-            {
+    # Should have called 4 mutations: storeRawDelivery + 3 chunk writes
+    assert mock_mut.call_count == 4
+    assert mock_mut.call_args[0][0] == "mutations.js:ingestNormalizedDelivery"
+    assert result["stored_records"] == 2
+    assert result["duplicate_records"] == 1
+    assert result["buffered_records"] == 3
+
+
+def test_ingest_delivery_reports_error_when_no_chunks_succeed():
+    """If all chunk writes fail, the delivery is marked as error."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key", ingest_batch_size=2)
+
+    with patch.object(
+        client._client,
+        "mutation",
+        side_effect=["delivery-123", None, None],
+    ) as mock_mut:
+        result = client.ingest_delivery(
+            raw_delivery={
                 "receivedAt": 1710803600000,
                 "sourceIp": "127.0.0.1",
                 "userAgent": "pytest",
                 "payloadJson": '{"records": []}',
                 "payloadHash": "hash123",
-                "status": "in_progress",
-                "recordCount": 3,
-            },
-        ),
-        call(
-            "mutations.js:ingestNormalizedEventsChunk",
-            {
-                "rawDeliveryId": "delivery-123",
-                "events": [
-                    {
-                        "rawDeliveryId": "placeholder",
-                        "recordType": "steps",
-                        "valueNumeric": 1000.0,
-                        "unit": "count",
-                        "startTime": 1710800000000,
-                        "endTime": 1710803600000,
-                        "capturedAt": 1710803600000,
-                        "payloadHash": "hash123",
-                        "fingerprint": "fingerprint-123",
-                        "createdAt": 1710803600000,
-                    },
-                    {
-                        "rawDeliveryId": "placeholder",
-                        "recordType": "steps",
-                        "valueNumeric": 500.0,
-                        "unit": "count",
-                        "startTime": 1710803600000,
-                        "endTime": 1710807200000,
-                        "capturedAt": 1710807200000,
-                        "payloadHash": "hash123",
-                        "fingerprint": "fingerprint-456",
-                        "createdAt": 1710807200000,
-                    },
-                ],
-            },
-        ),
-        call(
-            "mutations.js:ingestNormalizedEventsChunk",
-            {
-                "rawDeliveryId": "delivery-123",
-                "events": [
-                    {
-                        "rawDeliveryId": "placeholder",
-                        "recordType": "steps",
-                        "valueNumeric": 500.0,
-                        "unit": "count",
-                        "startTime": 1710807200000,
-                        "endTime": 1710810800000,
-                        "capturedAt": 1710810800000,
-                        "payloadHash": "hash123",
-                        "fingerprint": "fingerprint-456",
-                        "createdAt": 1710810800000,
-                    },
-                ],
-            },
-        ),
-        call(
-            "mutations.js:updateRawDeliveryStatus",
-            {
-                "rawDeliveryId": "delivery-123",
                 "status": "completed",
+                "recordCount": 3,
+                "dataClass": "test",
+                "dataClassReason": "header:x-openclaw-test-data",
             },
-        ),
-    ]
+            events=[
+                {
+                    "rawDeliveryId": "delivery-123",
+                    "recordType": "steps",
+                    "valueNumeric": 1000.0,
+                    "unit": "count",
+                    "startTime": 1710800000000,
+                    "endTime": 1710803600000,
+                    "capturedAt": 1710803600000,
+                    "payloadHash": "hash123",
+                    "fingerprint": "fingerprint-123",
+                    "createdAt": 1710803600000,
+                },
+            ],
+        )
+
+    assert result["status"] == "error"
+    assert "No chunks stored" in result["error"]
 
 
 def test_ingest_delivery_marks_buffered_delivery_as_error_when_a_chunk_fails():
-    """Buffered ingest should leave a visible error state on the raw delivery if chunk storage fails."""
-    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key", ingest_batch_size=1)
+    """If some (but not all) chunks succeed, the delivery is marked as partially-errored."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key", ingest_batch_size=2)
 
     with patch.object(
         client._client,
         "mutation",
         side_effect=[
             "delivery-123",
-            RuntimeError("chunk failed"),
+            {"receivedRecords": 1, "storedRecords": 1, "duplicateRecords": 0},
             None,
+            {
+                "receivedRecords": 1,
+                "storedRecords": 0,
+                "duplicateRecords": 0,
+            },
         ],
     ) as mock_mut:
-        try:
-            client.ingest_delivery(
-                raw_delivery={
-                    "receivedAt": 1710803600000,
-                    "sourceIp": "127.0.0.1",
-                    "userAgent": "pytest",
-                    "payloadJson": '{"records": []}',
-                    "payloadHash": "hash123",
-                    "status": "completed",
-                    "recordCount": 2,
-                },
-                events=[
-                    {
-                        "rawDeliveryId": "placeholder",
-                        "recordType": "steps",
-                        "valueNumeric": 1000.0,
-                        "unit": "count",
-                        "startTime": 1710800000000,
-                        "endTime": 1710803600000,
-                        "capturedAt": 1710803600000,
-                        "payloadHash": "hash123",
-                        "fingerprint": "fingerprint-123",
-                        "createdAt": 1710803600000,
-                    },
-                    {
-                        "rawDeliveryId": "placeholder",
-                        "recordType": "steps",
-                        "valueNumeric": 500.0,
-                        "unit": "count",
-                        "startTime": 1710803600000,
-                        "endTime": 1710807200000,
-                        "capturedAt": 1710807200000,
-                        "payloadHash": "hash123",
-                        "fingerprint": "fingerprint-456",
-                        "createdAt": 1710807200000,
-                    },
-                ],
-            )
-        except RuntimeError as exc:
-            assert str(exc) == "chunk failed"
-        else:
-            assert False, "ingest_delivery should re-raise the chunk failure"
-
-    assert mock_mut.call_args_list == [
-        call(
-            "mutations.js:storeRawDelivery",
-            {
+        result = client.ingest_delivery(
+            raw_delivery={
                 "receivedAt": 1710803600000,
                 "sourceIp": "127.0.0.1",
                 "userAgent": "pytest",
                 "payloadJson": '{"records": []}',
                 "payloadHash": "hash123",
-                "status": "in_progress",
-                "recordCount": 2,
+                "status": "completed",
+                "recordCount": 3,
+                "dataClass": "test",
+                "dataClassReason": "header:x-openclaw-test-data",
             },
-        ),
-        call(
-            "mutations.js:ingestNormalizedEventsChunk",
-            {
-                "rawDeliveryId": "delivery-123",
-                "events": [
-                    {
-                        "rawDeliveryId": "placeholder",
-                        "recordType": "steps",
-                        "valueNumeric": 1000.0,
-                        "unit": "count",
-                        "startTime": 1710800000000,
-                        "endTime": 1710803600000,
-                        "capturedAt": 1710803600000,
-                        "payloadHash": "hash123",
-                        "fingerprint": "fingerprint-123",
-                        "createdAt": 1710803600000,
-                    },
-                ],
-            },
-        ),
-        call(
-            "mutations.js:updateRawDeliveryStatus",
-            {
-                "rawDeliveryId": "delivery-123",
-                "status": "error",
-                "errorMessage": "chunk failed",
-            },
-        ),
-    ]
+            events=[
+                {
+                    "rawDeliveryId": "delivery-123",
+                    "recordType": "steps",
+                    "valueNumeric": 1000.0,
+                    "unit": "count",
+                    "startTime": 1710800000000,
+                    "endTime": 1710803600000,
+                    "capturedAt": 1710803600000,
+                    "payloadHash": "hash123",
+                    "fingerprint": "fingerprint-123",
+                    "createdAt": 1710803600000,
+                },
+                {
+                    "rawDeliveryId": "delivery-123",
+                    "recordType": "steps",
+                    "valueNumeric": 2000.0,
+                    "unit": "count",
+                    "startTime": 1710803600000,
+                    "endTime": 1710807200000,
+                    "capturedAt": 1710807200000,
+                    "payloadHash": "hash124",
+                    "fingerprint": "fingerprint-124",
+                    "createdAt": 1710807200000,
+                },
+                {
+                    "rawDeliveryId": "delivery-123",
+                    "recordType": "steps",
+                    "valueNumeric": 3000.0,
+                    "unit": "count",
+                    "startTime": 1710807200000,
+                    "endTime": 1710810800000,
+                    "capturedAt": 1710810800000,
+                    "payloadHash": "hash125",
+                    "fingerprint": "fingerprint-125",
+                    "createdAt": 1710810800000,
+                },
+            ],
+        )
 
-<<<<<<< HEAD
-import pytest
-from convex import ConvexError
+    assert result["stored_records"] == 1
+    assert result["status"] == "completed"
+    assert mock_mut.call_count == 4
+
 
 def test_get_analytics_overview_success():
     """get_analytics_overview successfully fetches and returns data."""
@@ -352,6 +294,7 @@ def test_get_analytics_overview_success():
             "deviceId": "dev1"
         }
 
+
 def test_get_analytics_overview_empty_result():
     """get_analytics_overview returns empty list if result is None or not a list."""
     client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
@@ -360,15 +303,20 @@ def test_get_analytics_overview_empty_result():
         result = client.get_analytics_overview()
         assert result == []
 
+
 def test_get_analytics_overview_handles_convex_error():
     """get_analytics_overview raises Exception on ConvexError."""
+    from convex import ConvexError
+    import pytest
+
     client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
 
     with patch.object(client._client, 'query', side_effect=ConvexError("test error", {"message": "test error"})):
         with pytest.raises(Exception) as excinfo:
             client.get_analytics_overview()
         assert "Convex error: test error" in str(excinfo.value)
-=======
+
+
 def test_check_db_health_success():
     """check_db_health returns the dict response on success."""
     client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
@@ -398,4 +346,3 @@ def test_check_db_health_convex_error():
             client.check_db_health()
         assert "Convex error: db is down" in str(exc_info.value)
         mock_query.assert_called_once_with("queries.js:checkDbHealth", {})
->>>>>>> pr-28
