@@ -1,5 +1,6 @@
 # One Entry per Line
 
+2026-05-08 Improve test coverage from 84% to 98%; add tests for normalizer helpers, Android record types, ConvexClient methods, browser auth security, ingest edge cases, analytics route validation, debug endpoint, and auth session persistence
 2026-04-26 Add AGENTS.md note to activate `.venv` before running pytest or VS Code test discovery
 2026-04-26 Add `getCurrentPeriodBounds` and `getPeriodStart` shared utilities, deduplicating identical code in mutations.ts and queries.ts
 2026-04-26 Update ADR-004 to document that analytics queries perform full event scans; note `getGoalProgress` full-scan fallback when recordType is omitted
