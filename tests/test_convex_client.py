@@ -448,3 +448,69 @@ def test_list_recent_deliveries_convex_error():
             assert "Convex error: query failed" in str(exc)
         else:
             assert False, "Should have raised an Exception"
+
+
+def test_detect_anomalies_success():
+    """detect_anomalies successfully fetches and returns anomaly data."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+    fake_result = {
+        "buckets": [{"time": 1000, "value": 10.0, "isAnomaly": False}],
+        "mean": 10.0,
+        "stddev": 1.0,
+        "anomalyCount": 0
+    }
+
+    with patch.object(client._client, 'query', return_value=fake_result) as mock_query:
+        result = client.detect_anomalies(
+            record_type="steps",
+            bucket_size="hour",
+            from_ms=1000,
+            to_ms=2000,
+            threshold=2.5
+        )
+        assert result == fake_result
+        mock_query.assert_called_once()
+        call_args = mock_query.call_args
+        assert call_args[0][0] == "queries.js:detectAnomalies"
+        assert call_args[0][1] == {
+            "recordType": "steps",
+            "bucketSize": "hour",
+            "fromMs": 1000,
+            "toMs": 2000,
+            "threshold": 2.5
+        }
+
+
+def test_detect_anomalies_optional_args():
+    """detect_anomalies strips None values from optional arguments."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, 'query', return_value={}) as mock_query:
+        client.detect_anomalies(
+            record_type="steps",
+            bucket_size="day"
+        )
+        mock_query.assert_called_once()
+        assert mock_query.call_args[0][1] == {
+            "recordType": "steps",
+            "bucketSize": "day"
+        }
+
+
+def test_detect_anomalies_non_dict_result():
+    """detect_anomalies returns an empty dict if the result is not a dict."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, 'query', return_value="not-a-dict"):
+        result = client.detect_anomalies(record_type="steps", bucket_size="hour")
+        assert result == {}
+
+
+def test_detect_anomalies_convex_error():
+    """detect_anomalies raises Exception on ConvexError."""
+    client = ConvexClient(convex_url="http://127.0.0.1:3210", admin_key="key")
+
+    with patch.object(client._client, 'query', side_effect=ConvexError("anomaly error", data=None)):
+        with pytest.raises(Exception) as excinfo:
+            client.detect_anomalies(record_type="steps", bucket_size="hour")
+        assert "Convex error: anomaly error" in str(excinfo.value)
