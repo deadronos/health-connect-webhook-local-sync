@@ -29,7 +29,7 @@ async def test_dashboard_returns_html():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(
             "/dashboard",
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
         )
 
     assert response.status_code == 200
@@ -54,7 +54,7 @@ async def test_dashboard_accepts_existing_session_cookie():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         login_response = await client.post(
             "/login",
-            data={"token": "test-token", "next": "/dashboard"},
+            data={"token": "test-token-at-least-32-chars-long-12345", "next": "/dashboard"},
         )
         response = await client.get("/dashboard")
 

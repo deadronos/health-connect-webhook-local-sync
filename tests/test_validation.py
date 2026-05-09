@@ -14,7 +14,7 @@ async def test_malformed_json_rejected():
         resp = await client.post(
             "/ingest/health/v1",
             content=b"not valid json",
-            headers={"Authorization": "Bearer test-token", "Content-Type": "application/json"},
+            headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345", "Content-Type": "application/json"},
         )
         assert resp.status_code == 422
 
@@ -31,6 +31,6 @@ async def test_missing_record_type_rejected():
         resp = await client.post(
             "/ingest/health/v1",
             json=payload,
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
         )
         assert resp.status_code == 422

@@ -42,7 +42,7 @@ async def test_ingest_route_uses_single_client_delivery_call():
             response = await client.post(
                 "/ingest/health/v1",
                 json=payload,
-                headers={"Authorization": "Bearer test-token"},
+                headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
             )
 
     assert response.status_code == 200

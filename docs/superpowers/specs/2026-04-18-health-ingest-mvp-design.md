@@ -225,9 +225,9 @@ Auth required.
 APP_ENV=development
 APP_HOST=0.0.0.0
 APP_PORT=8787
-INGEST_TOKEN=replace_me
+INGEST_TOKEN=replace_me_with_a_token_at_least_32_chars_long_12345
 CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210
-CONVEX_SELF_HOSTED_ADMIN_KEY=replace_me
+CONVEX_SELF_HOSTED_ADMIN_KEY=replace_me_with_a_token_at_least_32_chars_long_12345
 ENABLE_DEBUG_ROUTES=true
 ENABLE_ANALYTICS_ROUTES=true
 SESSION_SECRET=replace-me-session-secret

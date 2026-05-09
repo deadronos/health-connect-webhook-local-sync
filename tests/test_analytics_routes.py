@@ -44,7 +44,7 @@ async def test_overview_accepts_dashboard_session():
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             login_response = await client.post(
                 "/login",
-                data={"token": "test-token", "next": "/dashboard"},
+                data={"token": "test-token-at-least-32-chars-long-12345", "next": "/dashboard"},
             )
             response = await client.get("/analytics/overview")
 
@@ -79,7 +79,7 @@ async def test_timeseries_returns_points():
             response = await client.get(
                 "/analytics/timeseries",
                 params={"record_type": "steps", "bucket": "day", "stat": "sum"},
-                headers={"Authorization": "Bearer test-token"},
+                headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
             )
 
     assert response.status_code == 200
@@ -98,7 +98,7 @@ async def test_timeseries_invalid_record_type_returns_422():
         response = await client.get(
             "/analytics/timeseries",
             params={"record_type": "not-a-real-record", "bucket": "day", "stat": "sum"},
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
         )
 
     assert response.status_code == 422
@@ -133,7 +133,7 @@ async def test_export_csv_returns_attachment():
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 "/analytics/export.csv",
-                headers={"Authorization": "Bearer test-token"},
+                headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
             )
 
     assert response.status_code == 200
@@ -169,7 +169,7 @@ async def test_events_legacy_row_without_fingerprint_uses_payload_hash():
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 "/analytics/events",
-                headers={"Authorization": "Bearer test-token"},
+                headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
             )
 
     assert response.status_code == 200
@@ -204,7 +204,7 @@ async def test_export_csv_legacy_row_without_fingerprint_uses_payload_hash():
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 "/analytics/export.csv",
-                headers={"Authorization": "Bearer test-token"},
+                headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
             )
 
     assert response.status_code == 200

@@ -3,11 +3,11 @@ from fastapi import HTTPException
 import sys
 
 def test():
-    auth = BearerAuth(token="secret-token")
+    auth = BearerAuth(token="secret-token-at-least-32-chars-long-12345")
 
     # Test valid token
     try:
-        assert auth.verify_token("secret-token") is True
+        assert auth.verify_token("secret-token-at-least-32-chars-long-12345") is True
         print("PASS: valid token")
     except Exception as e:
         print(f"FAIL: valid token - {e}")
@@ -27,7 +27,7 @@ def test():
 
     # Test extraction and verification
     try:
-        assert auth.verify("Bearer secret-token") is True
+        assert auth.verify("Bearer secret-token-at-least-32-chars-long-12345") is True
         print("PASS: Bearer header verification")
     except Exception as e:
         print(f"FAIL: Bearer header verification - {e}")

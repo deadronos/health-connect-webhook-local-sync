@@ -381,7 +381,7 @@ Run: `python3 -m venv .venv && source .venv/bin/activate && pip install -e .`
 APP_ENV=development
 APP_HOST=127.0.0.1
 APP_PORT=8787
-INGEST_TOKEN=replace_me
+INGEST_TOKEN=replace_me_with_a_token_at_least_32_chars_long_12345
 CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210
 CONVEX_SELF_HOSTED_ADMIN_KEY=convex-self-hosted|REPLACE_ME
 ENABLE_DEBUG_ROUTES=true
@@ -410,11 +410,11 @@ git add pyproject.toml app/__init__.py .env.example && git commit -m "feat: add 
 from app.config import Settings
 
 def test_settings_loads_from_env(tmp_path, monkeypatch):
-    monkeypatch.setenv("INGEST_TOKEN", "test-token")
+    monkeypatch.setenv("INGEST_TOKEN", "test-token-at-least-32-chars-long-12345")
     monkeypatch.setenv("CONVEX_SELF_HOSTED_URL", "http://localhost:3210")
     monkeypatch.setenv("CONVEX_SELF_HOSTED_ADMIN_KEY", "test-key")
     settings = Settings()
-    assert settings.ingest_token == "test-token"
+    assert settings.ingest_token == "test-token-at-least-32-chars-long-12345"
     assert settings.convex_self_hosted_url == "http://localhost:3210"
 ```
 
@@ -432,7 +432,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     host: str = "127.0.0.1"
     port: int = 8787
-    ingest_token: str = "replace_me"
+    ingest_token: str = "replace_me_with_a_token_at_least_32_chars_long_12345"
     convex_self_hosted_url: str = "http://127.0.0.1:3210"
     convex_self_hosted_admin_key: str = ""
     enable_debug_routes: bool = True
@@ -1394,7 +1394,7 @@ def main():
     parser = argparse.ArgumentParser(description="Send mock Health Connect webhook payloads")
     parser.add_argument("--fixture", type=Path, required=True, help="Path to fixture JSON file")
     parser.add_argument("--url", default="http://127.0.0.1:8787/ingest/health/v1", help="Ingest endpoint URL")
-    parser.add_argument("--token", default="replace_me", help="Bearer token")
+    parser.add_argument("--token", default="replace_me_with_a_token_at_least_32_chars_long_12345", help="Bearer token")
     parser.add_argument("--repeat", type=int, default=1, help="Number of times to repeat")
     parser.add_argument("--jitter-hours", type=int, default=0, help="Random timestamp jitter in hours")
     args = parser.parse_args()
@@ -1501,7 +1501,7 @@ def test_malformed_json_rejected(test_client):
         response = test_client.post(
             "/ingest/health/v1",
             content=b"not valid json",
-            headers={"Authorization": "Bearer replace_me", "Content-Type": "application/json"},
+            headers={"Authorization": "Bearer replace_me_with_a_token_at_least_32_chars_long_12345", "Content-Type": "application/json"},
         )
         assert response.status_code == 422
 
@@ -1515,7 +1515,7 @@ def test_missing_record_type_rejected(test_client):
         response = test_client.post(
             "/ingest/health/v1",
             json=payload,
-            headers={"Authorization": "Bearer replace_me"},
+            headers={"Authorization": "Bearer replace_me_with_a_token_at_least_32_chars_long_12345"},
         )
         assert response.status_code == 422
 ```

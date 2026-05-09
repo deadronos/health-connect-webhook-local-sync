@@ -12,7 +12,7 @@ import pytest
 
 # Set test env vars before importing app modules.
 # Use direct assignment so local shell or .env values do not leak into the test process.
-os.environ["INGEST_TOKEN"] = "test-token"
+os.environ["INGEST_TOKEN"] = "test-token-at-least-32-chars-long-12345"
 os.environ["CONVEX_SELF_HOSTED_URL"] = "http://127.0.0.1:3210"
 os.environ["CONVEX_SELF_HOSTED_ADMIN_KEY"] = "test-admin-key"
 os.environ["ENABLE_DEBUG_ROUTES"] = "true"
