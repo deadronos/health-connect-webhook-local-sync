@@ -123,9 +123,9 @@ Create a local `.env` file in the repo root:
 APP_ENV=development
 APP_HOST=0.0.0.0
 APP_PORT=8787
-INGEST_TOKEN=replace_me
+INGEST_TOKEN=replace_me_with_a_token_at_least_32_chars_long_12345
 CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210
-CONVEX_SELF_HOSTED_ADMIN_KEY=replace_me
+CONVEX_SELF_HOSTED_ADMIN_KEY=replace_me_with_a_token_at_least_32_chars_long_12345
 ENABLE_DEBUG_ROUTES=true
 ENABLE_ANALYTICS_ROUTES=true
 SESSION_SECRET=replace-me-session-secret
@@ -320,7 +320,7 @@ The current `exercise` mapping stores `duration_seconds` as the value and preser
 | `APP_ENV` | `development` | Runtime environment |
 | `APP_HOST` | `0.0.0.0` | Listen address for the FastAPI dev server; binds all interfaces so sandboxed agents can reach `:8787` |
 | `APP_PORT` | `8787` | Listen port |
-| `INGEST_TOKEN` | `replace_me` | Bearer token for `/ingest/**` and `/debug/**`; also the shared credential used by direct API clients and the browser login form |
+| `INGEST_TOKEN` | `replace_me_with_a_token_at_least_32_chars_long_12345` | Bearer token for `/ingest/**` and `/debug/**`; also the shared credential used by direct API clients and the browser login form |
 | `CONVEX_SELF_HOSTED_URL` | `http://127.0.0.1:3210` | Convex backend URL |
 | `CONVEX_SELF_HOSTED_ADMIN_KEY` | — | Convex admin key |
 | `ENABLE_DEBUG_ROUTES` | `true` | Enable or disable `/debug/**` |

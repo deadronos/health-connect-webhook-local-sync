@@ -42,7 +42,7 @@ async def test_valid_payload_accepted(valid_record, mock_convex_client):
         resp = await client.post(
             "/ingest/health/v1",
             json=payload,
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -101,7 +101,7 @@ async def test_empty_records_list_accepted(valid_record, mock_convex_client):
         resp = await client.post(
             "/ingest/health/v1",
             json=payload,
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -127,7 +127,7 @@ async def test_multiple_records_accepted(valid_record, mock_convex_client):
         resp = await client.post(
             "/ingest/health/v1",
             json=payload,
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -149,7 +149,7 @@ async def test_header_marks_delivery_as_test_data(valid_record, mock_convex_clie
             "/ingest/health/v1",
             json=payload,
             headers={
-                "Authorization": "Bearer test-token",
+                "Authorization": "Bearer test-token-at-least-32-chars-long-12345",
                 "X-OpenClaw-Test-Data": "true",
             },
         )
@@ -174,7 +174,7 @@ async def test_mock_sender_user_agent_marks_delivery_as_test_data(valid_record, 
             "/ingest/health/v1",
             json=payload,
             headers={
-                "Authorization": "Bearer test-token",
+                "Authorization": "Bearer test-token-at-least-32-chars-long-12345",
                 "User-Agent": "health-ingest-mock-sender/1.0",
             },
         )
@@ -199,7 +199,7 @@ async def test_explicit_false_test_data_header_overrides_mock_sender_user_agent(
             "/ingest/health/v1",
             json=payload,
             headers={
-                "Authorization": "Bearer test-token",
+                "Authorization": "Bearer test-token-at-least-32-chars-long-12345",
                 "User-Agent": "health-ingest-mock-sender/1.0",
                 "X-OpenClaw-Test-Data": "false",
             },
@@ -225,7 +225,7 @@ async def test_invalid_test_data_header_rejected(valid_record, mock_convex_clien
             "/ingest/health/v1",
             json=payload,
             headers={
-                "Authorization": "Bearer test-token",
+                "Authorization": "Bearer test-token-at-least-32-chars-long-12345",
                 "X-OpenClaw-Test-Data": "sometimes",
             },
         )

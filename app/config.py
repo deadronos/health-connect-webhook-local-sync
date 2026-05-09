@@ -1,5 +1,6 @@
 """Application configuration loaded from environment variables via Pydantic Settings."""
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +31,31 @@ class Settings(BaseSettings):
     app_port: int = 8787
     ingest_token: str
     convex_self_hosted_url: str = "http://127.0.0.1:3210"
+
+    @field_validator("ingest_token")
+    @classmethod
+    def validate_ingest_token(cls, v: str) -> str:
+        """Enforce minimum length and complexity for the ingest token.
+
+        Args:
+            v: The token value to validate.
+
+        Returns:
+            The validated token.
+
+        Raises:
+            ValueError: If the token is too short or lacks required complexity.
+        """
+        if len(v) < 32:
+            raise ValueError("ingest_token must be at least 32 characters long")
+
+        has_letter = any(c.isalpha() for c in v)
+        has_digit = any(c.isdigit() for c in v)
+
+        if not (has_letter and has_digit):
+            raise ValueError("ingest_token must contain both letters and digits")
+
+        return v
     convex_self_hosted_admin_key: str = ""
     enable_debug_routes: bool = True
     enable_analytics_routes: bool = True

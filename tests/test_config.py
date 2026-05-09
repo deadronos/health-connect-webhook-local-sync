@@ -5,7 +5,7 @@ from app.config import Settings
 
 def test_settings_loads_from_env(tmp_path, monkeypatch):
     """Settings should load values from environment variables when provided."""
-    monkeypatch.setenv("INGEST_TOKEN", "test-token")
+    monkeypatch.setenv("INGEST_TOKEN", "test-token-at-least-32-chars-long-12345")
     monkeypatch.setenv("CONVEX_SELF_HOSTED_URL", "http://localhost:3210")
     monkeypatch.setenv("CONVEX_SELF_HOSTED_ADMIN_KEY", "test-key")
     monkeypatch.setenv("ENABLE_ANALYTICS_ROUTES", "false")
@@ -13,7 +13,7 @@ def test_settings_loads_from_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SESSION_COOKIE_NAME", "hc-session")
     monkeypatch.setenv("SESSION_MAX_AGE_SECONDS", "7200")
     settings = Settings()
-    assert settings.ingest_token == "test-token"
+    assert settings.ingest_token == "test-token-at-least-32-chars-long-12345"
     assert settings.convex_self_hosted_url == "http://localhost:3210"
     assert settings.enable_analytics_routes is False
     assert settings.session_secret == "test-session-secret"

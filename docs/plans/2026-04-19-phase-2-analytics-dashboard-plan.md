@@ -175,7 +175,7 @@ def test_ingest_route_uses_single_delivery_mutation(mock_convex_client, client):
     response = client.post(
         "/ingest/health/v1",
         json={"records": [record_one, record_two]},
-        headers={"Authorization": "Bearer test-token"},
+        headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
     )
     assert response.status_code == 200
     assert response.json()["stored_records"] == 1
@@ -294,7 +294,7 @@ def test_timeseries_returns_points(mock_convex_client, async_client):
     response = await async_client.get(
         "/analytics/timeseries",
         params={"record_type": "steps", "bucket": "day", "stat": "sum"},
-        headers={"Authorization": "Bearer test-token"},
+        headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
     )
     assert response.status_code == 200
     assert response.json()["points"][0]["value"] == 1500.0
@@ -391,7 +391,7 @@ def test_dashboard_requires_auth(client):
 
 
 def test_dashboard_returns_html(client):
-    response = client.get("/dashboard", headers={"Authorization": "Bearer test-token"})
+    response = client.get("/dashboard", headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"})
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "Health Analytics Dashboard" in response.text
@@ -501,7 +501,7 @@ Run:
 
 ```bash
 ./scripts/dev.sh
-python tools/mock_sender.py --fixture fixtures/healthconnect_android_mixed.json --token test-token
+python tools/mock_sender.py --fixture fixtures/healthconnect_android_mixed.json --token test-token-at-least-32-chars-long-12345
 ```
 
 Verify:

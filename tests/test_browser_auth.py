@@ -30,7 +30,7 @@ async def test_login_sets_session_cookie_and_redirects():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/login",
-            data={"token": "test-token", "next": "/dashboard"},
+            data={"token": "test-token-at-least-32-chars-long-12345", "next": "/dashboard"},
         )
 
     assert response.status_code == 303
@@ -65,7 +65,7 @@ async def test_logout_clears_dashboard_session():
     app = create_app()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        await client.post("/login", data={"token": "test-token", "next": "/dashboard"})
+        await client.post("/login", data={"token": "test-token-at-least-32-chars-long-12345", "next": "/dashboard"})
         logout_response = await client.post("/logout")
         dashboard_response = await client.get("/dashboard")
 
@@ -86,7 +86,7 @@ async def test_dashboard_session_does_not_authorize_ingest_or_debug():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         login_response = await client.post(
             "/login",
-            data={"token": "test-token", "next": "/dashboard"},
+            data={"token": "test-token-at-least-32-chars-long-12345", "next": "/dashboard"},
         )
         ingest_response = await client.post("/ingest/health/v1", json={"records": []})
         debug_response = await client.get("/debug/recent")

@@ -50,7 +50,7 @@ async def test_android_format_payload_accepted(valid_android_steps, mock_convex_
         resp = await client.post(
             "/ingest/health/v1",
             json=valid_android_steps,
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -77,7 +77,7 @@ async def test_android_format_multiple_types_accepted(mock_convex_client):
         resp = await client.post(
             "/ingest/health/v1",
             json=payload,
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -108,7 +108,7 @@ async def test_flat_format_still_works(valid_android_steps, mock_convex_client):
         resp = await client.post(
             "/ingest/health/v1",
             json=flat_payload,
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -134,7 +134,7 @@ async def test_android_format_invalid_payload_rejected():
         resp = await client.post(
             "/ingest/health/v1",
             json=payload,
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
         )
         assert resp.status_code == 422
 
@@ -163,7 +163,7 @@ async def test_android_exercise_ingest_passes_metadata_to_storage(mock_convex_cl
         resp = await client.post(
             "/ingest/health/v1",
             json=payload,
-            headers={"Authorization": "Bearer test-token"},
+            headers={"Authorization": "Bearer test-token-at-least-32-chars-long-12345"},
         )
 
     assert resp.status_code == 200

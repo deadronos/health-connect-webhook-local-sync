@@ -35,3 +35,4 @@
 2026-04-18 Add comprehensive README with architecture diagram, API reference, quick start guide, and project structure
 2026-04-18 Add AGENTS.md with doc/code sync rules and changelog policy
 2026-04-26 Add error handling tests for Android normalizer timestamp parsing
+2026-04-26 Enforce minimum length and complexity for `ingest_token` configuration; update tests and documentation to use compliant tokens

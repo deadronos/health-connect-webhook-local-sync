@@ -95,7 +95,7 @@ def main():
     parser = argparse.ArgumentParser(description="Send mock Health Connect webhook payloads")
     parser.add_argument("--fixture", type=Path, required=True, help="Path to fixture JSON file")
     parser.add_argument("--url", default="http://127.0.0.1:8787/ingest/health/v1", help="Ingest endpoint URL")
-    parser.add_argument("--token", default="replace_me", help="Bearer token")
+    parser.add_argument("--token", default="replace_me_with_a_token_at_least_32_chars_long_12345", help="Bearer token")
     parser.add_argument("--repeat", type=int, default=1, help="Number of times to repeat")
     parser.add_argument("--jitter-hours", type=int, default=0, help="Random timestamp jitter in hours")
     parser.add_argument("--user-agent", default="health-ingest-mock-sender/1.0", help="User-Agent header")

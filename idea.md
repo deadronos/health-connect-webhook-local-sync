@@ -429,7 +429,7 @@ Later, optionally add:
 APP_ENV=development
 APP_HOST=127.0.0.1
 APP_PORT=8787
-INGEST_TOKEN=replace_me
+INGEST_TOKEN=replace_me_with_a_token_at_least_32_chars_long_12345
 DB_PATH=./data/health.db
 ENABLE_DEBUG_ROUTES=true
 OPENCLAW_WEBHOOK_URL=
