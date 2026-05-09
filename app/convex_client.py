@@ -7,9 +7,6 @@ from typing import Optional
 from convex import ConvexError
 from convex.http_client import ConvexHttpClient
 
-from app.config import Settings
-
-
 DEFAULT_INGEST_EVENT_BATCH_SIZE = 1000
 
 
