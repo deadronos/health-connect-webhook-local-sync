@@ -304,11 +304,9 @@ export const storeHealthEvents = mutationGeneric({
     events: v.array(healthEventValidator),
   },
   handler: async (ctx, args) => {
-    const ids: string[] = [];
-    for (const event of args.events as HealthEvent[]) {
-      const id = await ctx.db.insert("healthEvents", event);
-      ids.push(id);
-    }
+    const ids = await Promise.all(
+      (args.events as HealthEvent[]).map((event) => ctx.db.insert("healthEvents", event))
+    );
     return ids;
   },
 });
