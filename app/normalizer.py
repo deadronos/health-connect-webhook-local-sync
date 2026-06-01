@@ -259,6 +259,32 @@ class AndroidPayloadNormalizer:
         "vo2_max": "vo2_max",
     }
 
+    HANDLER_MAP = {
+        "steps": lambda self, base, record: self._handle_duration_event(base, record, "count", "count"),
+        "sleep": lambda self, base, record: self._handle_sleep(base, record),
+        "heart_rate": lambda self, base, record: self._handle_instant_event_handler(base, record, "bpm", "bpm"),
+        "heart_rate_variability": lambda self, base, record: self._handle_instant_event_handler(
+            base, record, "rmssd_millis", "ms"
+        ),
+        "distance": lambda self, base, record: self._handle_duration_event(base, record, "meters", "m"),
+        "active_calories": lambda self, base, record: self._handle_duration_event(base, record, "calories", "kcal"),
+        "total_calories": lambda self, base, record: self._handle_duration_event(base, record, "calories", "kcal"),
+        "weight": lambda self, base, record: self._handle_point_in_time_event(base, record, "kilograms", "kg"),
+        "height": lambda self, base, record: self._handle_point_in_time_event(base, record, "meters", "m"),
+        "oxygen_saturation": lambda self, base, record: self._handle_point_in_time_event(base, record, "percentage", "%"),
+        "resting_heart_rate": lambda self, base, record: self._handle_instant_event_handler(base, record, "bpm", "bpm"),
+        "exercise": lambda self, base, record: self._handle_duration_event(base, record, "duration_seconds", "s"),
+        "nutrition": lambda self, base, record: self._handle_nutrition(base, record),
+        "basal_metabolic_rate": lambda self, base, record: self._handle_instant_event_handler(
+            base, record, "watts", "W"
+        ),
+        "body_fat": lambda self, base, record: self._handle_instant_event_handler(base, record, "percentage", "%"),
+        "lean_body_mass": lambda self, base, record: self._handle_instant_event_handler(base, record, "kilograms", "kg"),
+        "vo2_max": lambda self, base, record: self._handle_instant_event_handler(
+            base, record, "ml_per_kg_per_min", "ml/kg/min"
+        ),
+    }
+
     def __init__(self, payload: dict[str, Any], payload_hash: str, delivery_id: str):
         """Initialize the Android normalizer.
 
@@ -320,107 +346,70 @@ class AndroidPayloadNormalizer:
         }
 
         try:
-            match key:
-                case "steps":
-                    return self._build_android_event(
-                        base,
-                        value_numeric=float(record["count"]),
-                        unit="count",
-                        start_time=self._parse_instant(record["start_time"]),
-                        end_time=self._parse_instant(record["end_time"]),
-                        captured_at=self._parse_instant(record["end_time"]),
-                    )
-                case "sleep":
-                    return self._build_android_event(
-                        base,
-                        value_numeric=float(record["duration_seconds"]),
-                        unit="seconds",
-                        start_time=self._parse_instant(record["stages"][0]["start_time"]) if record.get("stages") and record["stages"] else 0,
-                        end_time=self._parse_instant(record["session_end_time"]),
-                        captured_at=self._parse_instant(record["session_end_time"]),
-                    )
-                case "heart_rate":
-                    return self._instant_event(base, record, "bpm", "bpm")
-                case "heart_rate_variability":
-                    return self._instant_event(base, record, "rmssd_millis", "ms")
-                case "distance":
-                    return self._build_android_event(
-                        base,
-                        value_numeric=float(record["meters"]),
-                        unit="m",
-                        start_time=self._parse_instant(record["start_time"]),
-                        end_time=self._parse_instant(record["end_time"]),
-                        captured_at=self._parse_instant(record["end_time"]),
-                    )
-                case "active_calories" | "total_calories":
-                    return self._build_android_event(
-                        base,
-                        value_numeric=float(record["calories"]),
-                        unit="kcal",
-                        start_time=self._parse_instant(record["start_time"]),
-                        end_time=self._parse_instant(record["end_time"]),
-                        captured_at=self._parse_instant(record["end_time"]),
-                    )
-                case "weight":
-                    return self._build_android_event(
-                        base,
-                        value_numeric=float(record["kilograms"]),
-                        unit="kg",
-                        start_time=self._parse_instant(record["time"]),
-                        end_time=self._parse_instant(record["time"]),
-                        captured_at=self._parse_instant(record["time"]),
-                    )
-                case "height":
-                    return self._build_android_event(
-                        base,
-                        value_numeric=float(record["meters"]),
-                        unit="m",
-                        start_time=self._parse_instant(record["time"]),
-                        end_time=self._parse_instant(record["time"]),
-                        captured_at=self._parse_instant(record["time"]),
-                    )
-                case "oxygen_saturation":
-                    return self._build_android_event(
-                        base,
-                        value_numeric=float(record["percentage"]),
-                        unit="%",
-                        start_time=self._parse_instant(record["time"]),
-                        end_time=self._parse_instant(record["time"]),
-                        captured_at=self._parse_instant(record["time"]),
-                    )
-                case "resting_heart_rate":
-                    return self._instant_event(base, record, "bpm", "bpm")
-                case "exercise":
-                    return self._build_android_event(
-                        base,
-                        value_numeric=float(record["duration_seconds"]),
-                        unit="s",
-                        start_time=self._parse_instant(record["start_time"]),
-                        end_time=self._parse_instant(record["end_time"]),
-                        captured_at=self._parse_instant(record["end_time"]),
-                    )
-                case "nutrition":
-                    total_calories = record.get("calories")
-                    return self._build_android_event(
-                        base,
-                        value_numeric=float(total_calories) if total_calories is not None else 0.0,
-                        unit="kcal",
-                        start_time=self._parse_instant(record["start_time"]),
-                        end_time=self._parse_instant(record["end_time"]),
-                        captured_at=self._parse_instant(record["end_time"]),
-                    )
-                case "basal_metabolic_rate":
-                    return self._instant_event(base, record, "watts", "W")
-                case "body_fat":
-                    return self._instant_event(base, record, "percentage", "%")
-                case "lean_body_mass":
-                    return self._instant_event(base, record, "kilograms", "kg")
-                case "vo2_max":
-                    return self._instant_event(base, record, "ml_per_kg_per_min", "ml/kg/min")
-                case _:
-                    return None
+            handler = self.HANDLER_MAP.get(key)
+            if handler:
+                return handler(self, base, record)
+            return None
         except KeyError:
             return None
+
+    def _handle_duration_event(
+        self, base: dict[str, Any], record: dict[str, Any], value_key: str, unit: str
+    ) -> dict[str, Any]:
+        """Generic handler for duration-based record types."""
+        return self._build_android_event(
+            base,
+            value_numeric=float(record[value_key]),
+            unit=unit,
+            start_time=self._parse_instant(record["start_time"]),
+            end_time=self._parse_instant(record["end_time"]),
+            captured_at=self._parse_instant(record["end_time"]),
+        )
+
+    def _handle_point_in_time_event(
+        self, base: dict[str, Any], record: dict[str, Any], value_key: str, unit: str
+    ) -> dict[str, Any]:
+        """Generic handler for point-in-time record types."""
+        instant = self._parse_instant(record["time"])
+        return self._build_android_event(
+            base,
+            value_numeric=float(record[value_key]),
+            unit=unit,
+            start_time=instant,
+            end_time=instant,
+            captured_at=instant,
+        )
+
+    def _handle_instant_event_handler(
+        self, base: dict[str, Any], record: dict[str, Any], value_key: str, unit: str
+    ) -> dict[str, Any]:
+        """Wrapper for _instant_event to match handler signature."""
+        return self._instant_event(base, record, value_key, unit)
+
+    def _handle_sleep(self, base: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+        """Specialized handler for sleep records."""
+        return self._build_android_event(
+            base,
+            value_numeric=float(record["duration_seconds"]),
+            unit="seconds",
+            start_time=self._parse_instant(record["stages"][0]["start_time"])
+            if record.get("stages") and record["stages"]
+            else 0,
+            end_time=self._parse_instant(record["session_end_time"]),
+            captured_at=self._parse_instant(record["session_end_time"]),
+        )
+
+    def _handle_nutrition(self, base: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+        """Specialized handler for nutrition records."""
+        total_calories = record.get("calories")
+        return self._build_android_event(
+            base,
+            value_numeric=float(total_calories) if total_calories is not None else 0.0,
+            unit="kcal",
+            start_time=self._parse_instant(record["start_time"]),
+            end_time=self._parse_instant(record["end_time"]),
+            captured_at=self._parse_instant(record["end_time"]),
+        )
 
     def _build_android_event(
         self,
