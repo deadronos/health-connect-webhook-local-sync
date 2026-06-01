@@ -35,3 +35,4 @@
 2026-04-18 Add comprehensive README with architecture diagram, API reference, quick start guide, and project structure
 2026-04-18 Add AGENTS.md with doc/code sync rules and changelog policy
 2026-04-26 Add error handling tests for Android normalizer timestamp parsing
+2026-05-22 Refactor AndroidPayloadNormalizer to use handler map for record types
