@@ -1,5 +1,6 @@
 """Tests for AndroidPayloadNormalizer which handles Android Health Connect format normalization."""
 
+import pytest
 from app.normalizer import AndroidPayloadNormalizer
 
 
@@ -63,20 +64,20 @@ def test_normalize_weight():
     assert events[0]["unit"] == "kg"
 
 
-def test_parse_instant():
+@pytest.mark.parametrize("ts, expected", [
+    ("2024-01-01T00:00:00Z", 1704067200000),
+    ("2024-01-01T00:00:00+00:00", 1704067200000),
+    ("invalid-date", 0),
+    ("2024-13-01T00:00:00Z", 0),  # Invalid month
+    ("2024-02-30T00:00:00Z", 0),  # Non-existent day
+    ("not-a-timestamp", 0),
+    ("", 0),
+    (None, 0),
+])
+def test_parse_instant(ts, expected):
     """AndroidPayloadNormalizer._parse_instant should handle valid, invalid, and empty strings."""
     normalizer = AndroidPayloadNormalizer({}, "hash", "del")
-
-    # Valid ISO-8601
-    assert normalizer._parse_instant("2024-01-01T00:00:00Z") == 1704067200000
-    assert normalizer._parse_instant("2024-01-01T00:00:00+00:00") == 1704067200000
-
-    # Invalid timestamp
-    assert normalizer._parse_instant("invalid-date") == 0
-
-    # Empty timestamp
-    assert normalizer._parse_instant("") == 0
-    assert normalizer._parse_instant(None) == 0
+    assert normalizer._parse_instant(ts) == expected
 
 def test_malformed_record_returns_none():
     """AndroidPayloadNormalizer should skip records missing required keys."""

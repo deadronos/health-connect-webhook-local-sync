@@ -122,3 +122,26 @@ def test_normalize_mixed():
     normalizer = Normalizer(payload=payload, payload_hash="abc123", delivery_id="del-1")
     events = normalizer.normalize()
     assert len(events) == 2
+
+
+def test_normalize_captured_at_fallback(monkeypatch):
+    """Normalizer should fallback to _now_ms() when captured_at_ms is missing."""
+    mock_now = 1710000000000
+    monkeypatch.setattr("app.normalizer._now_ms", lambda: mock_now)
+
+    payload = {
+        "records": [
+            {
+                "record_type": "steps",
+                "value": 100,
+                "unit": "count",
+                "start_time_ms": 1713446400000,
+                "end_time_ms": 1713489296000,
+                # captured_at_ms is missing
+            }
+        ]
+    }
+    normalizer = Normalizer(payload=payload, payload_hash="abc123", delivery_id="del-1")
+    events = normalizer.normalize()
+    assert len(events) == 1
+    assert events[0]["capturedAt"] == mock_now

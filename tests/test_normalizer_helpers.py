@@ -1,5 +1,8 @@
 """Tests for normalizer helper functions and additional Android record types."""
 
+from datetime import datetime, timezone
+from unittest.mock import patch
+
 import pytest
 from app.normalizer import (
     Normalizer,
@@ -39,6 +42,16 @@ def test_now_ms_returns_positive_integer():
     ts = _now_ms()
     assert isinstance(ts, int)
     assert ts > 0
+
+
+def test_now_ms_accuracy():
+    """_now_ms should return the correct timestamp in milliseconds."""
+    fixed_now = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    expected_ms = 1704067200000
+
+    with patch("app.normalizer.datetime") as mock_datetime:
+        mock_datetime.now.return_value = fixed_now
+        assert _now_ms() == expected_ms
 
 
 def test_device_id_from_record_snake_case():
